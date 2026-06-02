@@ -1,4 +1,4 @@
-package com.example.balanzo
+package com.mycompany.balanzo
 
 import io.flutter.embedding.android.FlutterActivity
 

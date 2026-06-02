@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "613777273688",
+    "project_id": "balanzo-app",
+    "storage_bucket": "balanzo-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:613777273688:android:430c0261b8566a2dde6b2d",
+        "android_client_info": {
+          "package_name": "com.mycompany.balanzo"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "613777273688-ik0ak7oohddtvgr64p5qobfoaalina7s.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mycompany.balanzo",
+            "certificate_hash": "5f1712f35098675a72e2b994f435f0a6e24bee50"
+          }
+        },
+        {
+          "client_id": "613777273688-s5to8t2nvu7v6d9stb2sjdlvfffj2vdu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB9lou8Lh9klzcoFefdoOvq13KZT4ng3Os"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "613777273688-s5to8t2nvu7v6d9stb2sjdlvfffj2vdu.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "613777273688-kme6idfejdql19v0r9kcfk2elvqe9tac.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.mycompany.balanzo"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
