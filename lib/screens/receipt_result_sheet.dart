@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
+import '../app_state.dart';
 import '../models/category.dart';
 import '../models/receipt.dart';
+import '../services/category_assignment_service.dart';
 import '../services/category_matcher.dart';
 import '../services/category_service.dart';
 import '../services/notification_service.dart';
 import '../services/family_service.dart';
 import '../services/receipt_service.dart';
+import '../models/fiscal_duplicate.dart';
+import '../l10n/app_strings.dart';
+import 'receipt_detail_screen.dart';
 import '../utils/icon_mapper.dart';
+import '../utils/receipt_numbers.dart';
 import '../widgets/category_picker_sheet.dart';
 import '../widgets/copyable_fiscal_id.dart';
 
@@ -35,6 +41,7 @@ class _EditItem {
   final TextEditingController nameCtrl;
   final TextEditingController qtyCtrl;
   final TextEditingController priceCtrl;
+  final double lineTotal;
   String? categoryId;
   bool editing = false;
 
@@ -42,14 +49,14 @@ class _EditItem {
     required String name,
     required double qty,
     required double unitPrice,
+    required double totalPrice,
     this.categoryId,
   })  : nameCtrl = TextEditingController(text: name),
-        qtyCtrl = TextEditingController(
-          text: qty == qty.roundToDouble()
-              ? qty.toInt().toString()
-              : qty.toStringAsFixed(2),
-        ),
-        priceCtrl = TextEditingController(text: unitPrice.toStringAsFixed(2));
+        lineTotal = totalPrice,
+        qtyCtrl = TextEditingController(text: ReceiptNumbers.formatQuantity(qty)),
+        priceCtrl = TextEditingController(
+          text: ReceiptNumbers.formatUnitPrice(unitPrice),
+        );
 
   void dispose() {
     nameCtrl.dispose();
@@ -63,6 +70,7 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
   bool _saveAsFamily = false;
   bool _hasFamily = false;
   late Receipt _receipt;
+  DateTime? _purchaseDate;
   late List<_EditItem> _editItems;
   late final TextEditingController _storeCtrl;
   List<Category> _categories = [];
@@ -71,10 +79,31 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
   void initState() {
     super.initState();
     _receipt = widget.receipt.withCorrectedTotals();
+    _purchaseDate = _receipt.date;
     _storeCtrl = TextEditingController(text: _receipt.store ?? '');
-    _editItems = [];
+    _editItems = _receipt.items
+        .map(
+          (item) => _EditItem(
+            name: item.name,
+            qty: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice,
+            categoryId: item.categoryId,
+          ),
+        )
+        .toList();
     _loadCategories();
     _checkFamily();
+    _checkDuplicate();
+  }
+
+  Future<void> _checkDuplicate() async {
+    final fiscalId = _receipt.documentId?.trim();
+    if (fiscalId == null || fiscalId.isEmpty) return;
+    final hit = await ReceiptService.findDuplicateByFiscalId(fiscalId);
+    if (hit != null && mounted) {
+      await _showDuplicateDialog(hit);
+    }
   }
 
   Future<void> _checkFamily() async {
@@ -85,18 +114,16 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
   Future<void> _loadCategories() async {
     final cats = await CategoryService.fetchAll();
     if (!mounted) return;
+    final assigned = CategoryAssignmentService.assignItems(
+      _receipt.items,
+      cats,
+      storeName: _receipt.store,
+    );
     setState(() {
       _categories = cats;
-      _editItems = _receipt.items.map((item) {
-        final catId = item.categoryId ??
-            CategoryMatcher.suggestCategoryId(item.name, cats);
-        return _EditItem(
-          name: item.name,
-          qty: item.quantity,
-          unitPrice: item.unitPrice,
-          categoryId: catId,
-        );
-      }).toList();
+      for (var i = 0; i < _editItems.length && i < assigned.length; i++) {
+        _editItems[i].categoryId ??= assigned[i].categoryId;
+      }
     });
   }
 
@@ -109,6 +136,27 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
     super.dispose();
   }
 
+  void _removeItem(int index) {
+    setState(() {
+      _editItems[index].dispose();
+      _editItems.removeAt(index);
+    });
+  }
+
+  double get _itemsSubtotal =>
+      _editItems.fold(0.0, (s, e) => s + e.lineTotal);
+
+  double get _displayTotal {
+    final header = _receipt.total;
+    final ekassa = _receipt.isGovernmentVerified ||
+        (_receipt.documentId != null && _receipt.documentId!.isNotEmpty);
+    if (_editItems.isEmpty) return header;
+    if (ekassa && header > _itemsSubtotal + 0.5 && header < _itemsSubtotal * 3) {
+      return header;
+    }
+    return _itemsSubtotal + (_receipt.serviceCharge ?? 0);
+  }
+
   Receipt _buildEditedReceipt() {
     final items = _editItems.map((e) {
       final qty = double.tryParse(e.qtyCtrl.text) ?? 1.0;
@@ -117,42 +165,81 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
         name: e.nameCtrl.text.trim().isEmpty ? '?' : e.nameCtrl.text.trim(),
         quantity: qty,
         unitPrice: unitPrice,
-        totalPrice: qty * unitPrice,
+        totalPrice: e.lineTotal,
         categoryId: e.categoryId,
       );
     }).toList();
     final subtotal = items.fold(0.0, (s, i) => s + i.totalPrice);
     final storeName = _storeCtrl.text.trim();
+    final headerTotal = _receipt.total;
+    final ekassaReceipt = _receipt.isGovernmentVerified ||
+        (_receipt.documentId != null && _receipt.documentId!.isNotEmpty);
+    final useHeaderTotal = ekassaReceipt &&
+        headerTotal > subtotal + 0.5 &&
+        headerTotal < subtotal * 3;
     return Receipt(
       store: storeName.isEmpty ? null : storeName,
-      date: _receipt.date,
+      date: _purchaseDate,
       items: items,
       subtotal: subtotal,
       serviceCharge: _receipt.serviceCharge,
       vat: _receipt.vat,
       total: items.isEmpty
-          ? _receipt.total
-          : subtotal + (_receipt.serviceCharge ?? 0),
+          ? headerTotal
+          : useHeaderTotal
+              ? headerTotal
+              : subtotal + (_receipt.serviceCharge ?? 0),
       currency: _receipt.currency,
       isGovernmentVerified: _receipt.isGovernmentVerified,
       documentId: _receipt.documentId,
     );
   }
 
+  Future<void> _pickPurchaseDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _purchaseDate ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      builder: (context, child) => Theme(
+        data: ThemeData(
+          colorScheme: const ColorScheme.light(primary: Color(0xFF1B5E20)),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null && mounted) setState(() => _purchaseDate = picked);
+  }
+
   Future<void> _save() async {
     if (_saving) return;
+    if (_purchaseDate == null) {
+      _snack('Please select the purchase date.', error: true);
+      return;
+    }
     setState(() => _saving = true);
     try {
       NotificationService.requestIfNotAsked();
-      final edited = _buildEditedReceipt();
+      final edited = CategoryAssignmentService.assignReceipt(
+        _buildEditedReceipt(),
+        _categories,
+      );
       final receiptId = await ReceiptService.save(
         edited,
         categories: _categories,
         saveAsFamily: _saveAsFamily,
       );
       if (!mounted) return;
+      notifyReceiptsChanged();
       Navigator.of(context).pop(ReceiptSaveResult(receiptId));
     } catch (e) {
+      if (e is FiscalDuplicateException) {
+        if (mounted) {
+          setState(() => _saving = false);
+          await _showDuplicateDialog(e.hit);
+        }
+        return;
+      }
       if (mounted) {
         setState(() => _saving = false);
         final msg = e.toString().replaceFirst('Exception: ', '');
@@ -187,6 +274,64 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
       if (c.id == id) return c;
     }
     return null;
+  }
+
+  void _snack(String msg, {bool error = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: error ? Colors.red.shade700 : const Color(0xFF1B5E20),
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+
+  Future<void> _showDuplicateDialog(FiscalDuplicateHit hit) async {
+    final lang = currentLanguage.value;
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(AppStrings.get('duplicate_receipt_title', lang)),
+        content: Text(
+          AppStrings.duplicateReceiptBody(hit.scannerLabel, hit.storeName, lang),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(AppStrings.get('cancel', lang)),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ReceiptDetailScreen(
+                    receiptId: hit.receiptId,
+                    receipt: Receipt(
+                      store: hit.storeName,
+                      date: hit.purchaseDate != null
+                          ? DateTime.tryParse(hit.purchaseDate!)
+                          : null,
+                      items: const [],
+                      subtotal: 0,
+                      vat: 0,
+                      total: 0,
+                      currency: 'AZN',
+                      documentId: null,
+                    ),
+                  ),
+                ),
+              );
+            },
+            child: Text(AppStrings.get('view_receipt', lang)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
   }
 
   @override
@@ -293,19 +438,40 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                             suffixIcon: Icon(Icons.edit, size: 14, color: Colors.black38),
                           ),
                         ),
-                        if (receipt.date != null)
-                          Text(
-                            '${receipt.date!.day}.${receipt.date!.month.toString().padLeft(2, '0')}.${receipt.date!.year}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.black54,
+                        InkWell(
+                          onTap: _pickPurchaseDate,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  _purchaseDate != null
+                                      ? _formatDate(_purchaseDate!)
+                                      : 'Select purchase date *',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: _purchaseDate != null
+                                        ? Colors.black54
+                                        : Colors.orange.shade800,
+                                    fontWeight: _purchaseDate == null
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.calendar_today_outlined,
+                                    size: 14, color: Colors.black38),
+                              ],
                             ),
                           ),
+                        ),
                       ],
                     ),
                   ),
                   Text(
-                    '${receipt.total.toStringAsFixed(2)} ${receipt.currency}',
+                    '${_displayTotal.toStringAsFixed(2)} ${receipt.currency}',
                     style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
@@ -318,10 +484,24 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
             const Divider(height: 24),
             Expanded(
               child: _editItems.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'No items detected',
-                        style: TextStyle(color: Colors.black54),
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.delete_sweep_outlined,
+                              size: 40, color: Colors.black38),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'All items removed',
+                            style: TextStyle(color: Colors.black54),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Tap Save to keep receipt total only, or Retake',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          ),
+                        ],
                       ),
                     )
                   : ListView.builder(
@@ -505,6 +685,11 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                   icon: const Icon(Icons.check_circle, color: Color(0xFF1B5E20)),
                   onPressed: () => setState(() => edit.editing = false),
                 ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  tooltip: 'Remove item',
+                  onPressed: () => _removeItem(i),
+                ),
               ],
             ),
           ],
@@ -514,8 +699,9 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
 
     final qty = double.tryParse(edit.qtyCtrl.text) ?? 1.0;
     final unitPrice = double.tryParse(edit.priceCtrl.text) ?? 0.0;
-    final totalPrice = qty * unitPrice;
-    final cat = _categoryFor(edit.categoryId);
+    final totalPrice = edit.lineTotal;
+    final cat = _categoryFor(edit.categoryId) ??
+        _categoryFor(CategoryMatcher.otherCategoryId(_categories));
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -532,7 +718,7 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                 ),
                 if (qty != 1.0)
                   Text(
-                    '$qty × ${unitPrice.toStringAsFixed(2)}',
+                    '${ReceiptNumbers.formatQuantity(qty)} × ${ReceiptNumbers.formatUnitPrice(unitPrice)}',
                     style: const TextStyle(fontSize: 12, color: Colors.black54),
                   ),
                 const SizedBox(height: 4),
@@ -562,7 +748,7 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                               size: 12, color: Colors.black45),
                         const SizedBox(width: 4),
                         Text(
-                          cat?.name ?? 'Category',
+                          cat?.name ?? 'Other',
                           style: TextStyle(
                             fontSize: 11,
                             color: cat != null
@@ -581,7 +767,7 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
             ),
           ),
           Text(
-            totalPrice.toStringAsFixed(2),
+            ReceiptNumbers.formatLineTotal(totalPrice),
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.bold,
@@ -589,9 +775,16 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
             ),
           ),
           IconButton(
+            icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            tooltip: 'Remove item',
+            onPressed: () => _removeItem(i),
+          ),
+          IconButton(
             icon: const Icon(Icons.edit_outlined, size: 16, color: Colors.black54),
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             onPressed: () => setState(() => edit.editing = true),
           ),
         ],

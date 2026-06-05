@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -86,7 +88,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (e is AuthException) {
       final code = e.statusCode;
       if (code == '401' || code == '400') {
-        return 'Google sign-in rejected by server. Check Supabase Auth → Google provider (Web client ID + secret).';
+        return 'Sign-in rejected by server. Check provider settings in Supabase Auth.';
       }
       return e.message;
     }
@@ -132,25 +134,19 @@ class _LoginScreenState extends State<LoginScreen> {
                 style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
               ),
               const SizedBox(height: 48),
-              // Google button — isolated GestureDetector, no shared parent tap
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _anyLoading ? null : _signInWithGoogle,
-                child: _GoogleButton(
-                  loading: _googleLoading,
-                  disabled: _appleLoading,
-                ),
+              _GoogleButton(
+                loading: _googleLoading,
+                disabled: _appleLoading,
+                onPressed: _signInWithGoogle,
               ),
-              const SizedBox(height: 16),
-              // Apple button — isolated GestureDetector, no shared parent tap
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _anyLoading ? null : _signInWithApple,
-                child: _AppleButton(
+              if (Platform.isIOS) ...[
+                const SizedBox(height: 16),
+                _AppleButton(
                   loading: _appleLoading,
                   disabled: _googleLoading,
+                  onPressed: _signInWithApple,
                 ),
-              ),
+              ],
               const SizedBox(height: 32),
               Text(
                 'By continuing, you agree to our Terms of Service and Privacy Policy',
@@ -203,16 +199,21 @@ class _LoginScreenState extends State<LoginScreen> {
 class _GoogleButton extends StatelessWidget {
   final bool loading;
   final bool disabled;
+  final VoidCallback onPressed;
 
-  const _GoogleButton({required this.loading, this.disabled = false});
+  const _GoogleButton({
+    required this.loading,
+    required this.onPressed,
+    this.disabled = false,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final inactive = disabled || loading;
     return SizedBox(
       height: 54,
       child: OutlinedButton(
-        // onPressed is null so InkWell doesn't intercept — tap handled by parent GestureDetector
-        onPressed: null,
+        onPressed: inactive ? null : onPressed,
         style: OutlinedButton.styleFrom(
           backgroundColor: Colors.white,
           side: BorderSide(color: disabled ? Colors.grey.shade200 : Colors.grey.shade300),
@@ -261,21 +262,26 @@ class _GoogleButton extends StatelessWidget {
 class _AppleButton extends StatelessWidget {
   final bool loading;
   final bool disabled;
+  final VoidCallback onPressed;
 
-  const _AppleButton({required this.loading, this.disabled = false});
+  const _AppleButton({
+    required this.loading,
+    required this.onPressed,
+    this.disabled = false,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final inactive = disabled || loading;
     return SizedBox(
       height: 54,
       child: ElevatedButton(
-        // onPressed is null so InkWell doesn't intercept — tap handled by parent GestureDetector
-        onPressed: null,
+        onPressed: inactive ? null : onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: disabled ? Colors.black38 : Colors.black,
+          backgroundColor: Colors.black,
           foregroundColor: Colors.white,
-          disabledBackgroundColor: disabled ? Colors.black38 : Colors.black54,
-          disabledForegroundColor: Colors.white,
+          disabledBackgroundColor: Colors.black,
+          disabledForegroundColor: Colors.white70,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),

@@ -1,0 +1,54 @@
+Object name: MAĞAZA
+Object address: AZ1052 BAKI ŞAHARİ
+NaRiMANOV RAYONU AĞA NEMATULLA
+ev.140B m.0
+Object code: 1801961881-15003
+TIN: 1801961881
+Sale receipt Nº 1559966
+Cashier:
+30.05.2026
+Nerimanov3 Date:
+Time:
+16:45:54
+**********************************************
+Product
+Quantity Price Total
+0.73
+6.90 5.02
+Gunebaxan ala qovrulmu (pc)
+*VAT: 18%
+0.03
+1
+0.03
+Klok Mayka orta 3kq
+(pc)
+*VAT: 18%
+5.05
+Total
+5.05
+*VAT 18% = 0.77
+*Total tax = 0.77
+*************»
+Payment type
+0.00
+Cashless:
+Cash:
+5.05
+* Paid cash:
+5.05
+* Change:
+0.00
+Bonus:
+0.00
+Prepayment:
+0.00
+Credit:
+0.00
+Receipt order in shift: 686
+Cash register model: SUNMI V1S
+Cash register factory number: VS43226730383
+Fiscal ID: 5SXTeKsQ8E9z
+Cashbox registration number: 0000115684
+www.e-kassa.gov.az
+VAT refund
+No VAT refund on the receipt.

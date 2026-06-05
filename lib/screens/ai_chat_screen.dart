@@ -11,7 +11,9 @@ import '../services/subscription_service.dart';
 import 'upgrade_screen.dart';
 
 class AiChatScreen extends StatefulWidget {
-  const AiChatScreen({super.key});
+  final VoidCallback? onBack;
+
+  const AiChatScreen({super.key, this.onBack});
 
   @override
   State<AiChatScreen> createState() => _AiChatScreenState();
@@ -33,7 +35,17 @@ class _AiChatScreenState extends State<AiChatScreen> {
     _init();
   }
 
-  void _onLangChange() => setState(() {});
+  void _onLangChange() {
+    if (!mounted) return;
+    setState(() {
+      if (_messages.isNotEmpty && !_messages.first.isUser) {
+        _messages[0] = _Message(
+          text: AppStrings.aiGreeting(currentLanguage.value),
+          isUser: false,
+        );
+      }
+    });
+  }
 
   Future<void> _init() async {
     final access = await SubscriptionService.checkAiAccess();
@@ -151,6 +163,64 @@ class _AiChatScreenState extends State<AiChatScreen> {
   int get _freeQuestionsLeft {
     if (_access == null) return 1;
     return (_access!.questionsLimit - _access!.questionsUsed).clamp(0, _access!.questionsLimit);
+  }
+
+  Widget _buildUpgradeBanner() {
+    final lang = currentLanguage.value;
+    final access = _access!;
+    final limitReached = _freeQuestionsLeft == 0;
+    final message = limitReached
+        ? AppStrings.aiUpgradeLimitReached(lang)
+        : AppStrings.aiUpgradeBanner(
+            access.dataWindowDays,
+            _freeQuestionsLeft,
+            lang,
+          );
+
+    return Material(
+      color: limitReached ? const Color(0xFF1B5E20) : Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          children: [
+            Icon(
+              limitReached ? Icons.lock_outline : Icons.info_outline,
+              size: 16,
+              color: limitReached ? Colors.white70 : Colors.amber.shade700,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: limitReached
+                      ? Colors.white
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const UpgradeScreen()),
+              ),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                AppStrings.get('ai_upgrade', lang),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: limitReached ? Colors.white : const Color(0xFF1B5E20),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showUpgradeSheet() {
@@ -308,94 +378,27 @@ class _AiChatScreenState extends State<AiChatScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Row(
-          children: [
-            Text(AppStrings.get('ai_assistant', currentLanguage.value), style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(width: 8),
-            if (!_isPremium && _access != null && _freeQuestionsLeft > 0)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade700,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  '$_freeQuestionsLeft free left',
-                  style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600),
-                ),
-              ),
-          ],
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              widget.onBack?.call();
+            }
+          },
+        ),
+        title: Text(
+          AppStrings.get('ai_assistant', currentLanguage.value),
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         foregroundColor: Theme.of(context).colorScheme.onSurface,
         elevation: 0,
-        actions: [
-          if (!_isPremium)
-            TextButton(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const UpgradeScreen()),
-              ),
-              child: const Text('Upgrade', style: TextStyle(color: Colors.amber)),
-            ),
-        ],
       ),
       body: Column(
         children: [
-          // Data window banner for free users
-          if (_access != null && !_isPremium)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              color: const Color(0xFF18181C),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, size: 14, color: Colors.amber.shade300),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'Seeing last ${_access!.dataWindowDays} days · Get Premium',
-                      style: TextStyle(fontSize: 12, color: Colors.amber.shade300),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const UpgradeScreen()),
-                    ),
-                    child: Text(
-                      'Upgrade',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.amber.shade300,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          // Upgrade banner when free limit reached
-          if (!_isPremium && _access != null && _freeQuestionsLeft == 0)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              color: const Color(0xFF1B5E20),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Free tier: 1 message per week. Upgrade for unlimited.',
-                      style: TextStyle(color: Colors.white, fontSize: 13),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const UpgradeScreen()),
-                    ),
-                    child: const Text('Upgrade', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-            ),
+          if (_access != null && !_isPremium) _buildUpgradeBanner(),
           // Quick question pills
           if (_messages.length <= 1)
             Padding(

@@ -1,10 +1,10 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../app_state.dart';
 import '../l10n/app_strings.dart';
 import '../services/notification_service.dart';
+import '../services/receipt_service.dart';
 
 class RestockScreen extends StatefulWidget {
   const RestockScreen({super.key});
@@ -17,15 +17,19 @@ class _RestockScreenState extends State<RestockScreen> {
   List<_RestockItem> _items = [];
   bool _loading = true;
   final Set<String> _bought = {};
+  final Set<String> _ignored = {};
 
   @override
   void initState() {
     super.initState();
     currentLanguage.addListener(_onLangChange);
+    receiptsRevision.addListener(_onReceiptsChanged);
     _load();
   }
 
   void _onLangChange() => setState(() {});
+
+  void _onReceiptsChanged() => _load();
 
   Future<void> _load() async {
     setState(() => _loading = true);
@@ -37,23 +41,46 @@ class _RestockScreenState extends State<RestockScreen> {
         return;
       }
 
-      // Fetch all receipt items with their receipt dates
-      final rows = await client
-          .from('receipt_items')
-          .select('name_raw, total_price, receipts!inner(purchase_date, user_id)')
-          .eq('receipts.user_id', userId)
-          .order('name_raw');
+      final receipts = await ReceiptService.fetchPersonal();
+      if (receipts.isEmpty) {
+        setState(() {
+          _items = [];
+          _loading = false;
+        });
+        return;
+      }
 
-      // Group by item name and compute purchase frequency
-      final Map<String, List<DateTime>> byName = {};
-      for (final row in rows as List) {
-        final name = (row['name_raw'] as String? ?? '').trim();
+      final receiptDates = <String, DateTime>{};
+      for (final r in receipts) {
+        final id = r['id'] as String?;
+        final date = DateTime.tryParse(r['purchase_date']?.toString() ?? '');
+        if (id != null && date != null) {
+          receiptDates[id] = date;
+        }
+      }
+
+      final ids = receiptDates.keys.toList();
+      final rows = await ReceiptService.fetchItemsForReceipts(
+        ids,
+        select:
+            'name_raw, product_name, quantity, unit_price, total_price, purchase_id',
+      );
+
+      final byName = <String, List<_Purchase>>{};
+      for (final row in rows) {
+        final name = (row['product_name'] as String? ?? row['name_raw'] as String? ?? '')
+            .trim();
         if (name.isEmpty) continue;
-        final dateStr = (row['receipts'] as Map?)?['purchase_date'] as String?;
-        if (dateStr == null) continue;
-        final date = DateTime.tryParse(dateStr);
+        final purchaseId = row['purchase_id'] as String?;
+        final date = purchaseId != null ? receiptDates[purchaseId] : null;
         if (date == null) continue;
-        byName.putIfAbsent(name, () => []).add(date);
+        final qty = (row['quantity'] as num?)?.toDouble() ?? 1;
+        final unit = (row['unit_price'] as num?)?.toDouble() ?? 0;
+        final total = (row['total_price'] as num?)?.toDouble() ?? 0;
+        final unitPrice = unit > 0 ? unit : (qty > 0 ? total / qty : total);
+        byName.putIfAbsent(name, () => []).add(
+              _Purchase(date: date, quantity: qty, unitPrice: unitPrice),
+            );
       }
 
       final items = <_RestockItem>[];
@@ -61,30 +88,33 @@ class _RestockScreenState extends State<RestockScreen> {
 
       for (final entry in byName.entries) {
         if (entry.value.length < 2) continue;
-        final dates = entry.value..sort();
-        // Average gap between purchases in days
+        final purchases = entry.value..sort((a, b) => a.date.compareTo(b.date));
+
         double totalGap = 0;
-        for (int i = 1; i < dates.length; i++) {
-          totalGap += dates[i].difference(dates[i - 1]).inDays;
+        for (int i = 1; i < purchases.length; i++) {
+          totalGap += purchases[i].date.difference(purchases[i - 1].date).inDays;
         }
-        final avgDays = totalGap / (dates.length - 1);
+        final avgDays = totalGap / (purchases.length - 1);
         if (avgDays <= 0) continue;
 
-        final lastBought = dates.last;
-        final nextDue = lastBought.add(Duration(days: avgDays.round()));
+        final last = purchases.last;
+        final nextDue = last.date.add(Duration(days: avgDays.round()));
         final daysUntilDue = nextDue.difference(now).inDays;
+        final avgQty =
+            purchases.fold(0.0, (s, p) => s + p.quantity) / purchases.length;
 
         items.add(_RestockItem(
           name: entry.key,
-          lastBought: lastBought,
+          lastBought: last.date,
           avgDays: avgDays.round(),
           nextDue: nextDue,
           daysUntilDue: daysUntilDue,
-          purchaseCount: entry.value.length,
+          purchaseCount: purchases.length,
+          avgQuantity: avgQty,
+          latestUnitPrice: last.unitPrice,
         ));
       }
 
-      // Sort: overdue first, then soonest due
       items.sort((a, b) => a.daysUntilDue.compareTo(b.daysUntilDue));
 
       setState(() {
@@ -92,7 +122,6 @@ class _RestockScreenState extends State<RestockScreen> {
         _loading = false;
       });
 
-      // Send notification for items overdue
       final overdue = items.where((i) => i.daysUntilDue < 0).toList();
       if (overdue.isNotEmpty) {
         await NotificationService.sendRestockReminder(overdue.first.name);
@@ -108,89 +137,150 @@ class _RestockScreenState extends State<RestockScreen> {
   }
 
   Future<void> _shareWhatsApp() async {
-    final due = _items.where((i) => !_bought.contains(i.name) && i.daysUntilDue <= 3).toList();
+    final due = _activeItems;
     if (due.isEmpty) return;
-    final list = due.map((i) => '• ${i.name}').join('\n');
-    final msg = Uri.encodeComponent('Shopping List (Balanzo):\n$list');
+    final lang = currentLanguage.value;
+    final lines = due.map((i) {
+      final qty = i.avgQuantity == i.avgQuantity.roundToDouble()
+          ? i.avgQuantity.toStringAsFixed(0)
+          : i.avgQuantity.toStringAsFixed(1);
+      final unit = i.latestUnitPrice.toStringAsFixed(2);
+      final line = i.estimatedLineCost.toStringAsFixed(2);
+      return '• ${i.name}\n  qty: $qty × $unit AZN = $line AZN';
+    }).join('\n');
+    final total = due.fold(0.0, (s, i) => s + i.estimatedLineCost);
+    final header = AppStrings.get('restock_share_header', lang);
+    final totalLabel = AppStrings.get('restock_share_est_total', lang);
+    final body = '$header\n$lines\n\n$totalLabel ${total.toStringAsFixed(2)} AZN';
+    final msg = Uri.encodeComponent(body);
     final url = Uri.parse('https://wa.me/?text=$msg');
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     }
   }
 
+  List<_RestockItem> get _activeItems =>
+      _items.where((i) => !_bought.contains(i.name) && !_ignored.contains(i.name)).toList();
+
   @override
   void dispose() {
     currentLanguage.removeListener(_onLangChange);
+    receiptsRevision.removeListener(_onReceiptsChanged);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final lang = currentLanguage.value;
-    final dueItems = _items.where((i) => !_bought.contains(i.name)).toList();
+    final dueItems = _activeItems;
     final boughtItems = _items.where((i) => _bought.contains(i.name)).toList();
+    final ignoredItems = _items.where((i) => _ignored.contains(i.name)).toList();
+    final estBudget =
+        dueItems.fold(0.0, (s, i) => s + i.estimatedLineCost);
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(AppStrings.get('restock', lang), style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          AppStrings.get('restock', lang),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         foregroundColor: Theme.of(context).colorScheme.onSurface,
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: Icon(Icons.refresh, color: Theme.of(context).colorScheme.onSurface),
             onPressed: _load,
           ),
-          if (dueItems.any((i) => i.daysUntilDue <= 3))
+          if (dueItems.isNotEmpty)
             IconButton(
-              icon: const Icon(Icons.share),
-              tooltip: 'Share shopping list',
+              icon: Icon(Icons.share, color: Theme.of(context).colorScheme.onSurface),
+              tooltip: AppStrings.get('share_shopping_list', lang),
               onPressed: _shareWhatsApp,
             ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : dueItems.isEmpty && boughtItems.isEmpty
+          : dueItems.isEmpty && boughtItems.isEmpty && ignoredItems.isEmpty
               ? _EmptyState(onRefresh: _load, lang: lang)
               : RefreshIndicator(
-                  onRefresh: () => _load(),
+                  onRefresh: _load,
                   child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
                       if (dueItems.isNotEmpty) ...[
                         _SectionHeader(
                           title: AppStrings.get('due_for_restock', lang),
-                          subtitle: '${dueItems.length} items',
+                          subtitle: '${dueItems.length} ${AppStrings.get('restock_items_due', lang)}',
                         ),
                         const SizedBox(height: 8),
-                        // Estimated basket cost
-                        _BasketCostCard(items: dueItems.take(5).toList()),
+                        _BasketCostCard(
+                          itemCount: dueItems.length,
+                          estBudget: estBudget,
+                          lang: lang,
+                        ),
                         const SizedBox(height: 12),
                         ...dueItems.map((item) => _RestockCard(
                               item: item,
+                              lang: lang,
                               onBought: () => setState(() => _bought.add(item.name)),
+                              onIgnore: () => setState(() => _ignored.add(item.name)),
                             )),
                       ],
                       if (boughtItems.isNotEmpty) ...[
                         const SizedBox(height: 16),
                         _SectionHeader(
                           title: AppStrings.get('marked_as_bought', lang),
-                          subtitle: '${boughtItems.length} items',
+                          subtitle: '${boughtItems.length}',
                           action: TextButton(
                             onPressed: () => setState(() => _bought.clear()),
-                            child: const Text('Clear', style: TextStyle(color: Color(0xFF8888A0))),
+                            child: Text(
+                              AppStrings.get('restock_clear', lang),
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 8),
-                        ...boughtItems.map((item) => _BoughtCard(item: item)),
+                        ...boughtItems.map((item) => _MutedItemRow(item: item, lang: lang)),
+                      ],
+                      if (ignoredItems.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        _SectionHeader(
+                          title: AppStrings.get('restock_ignored', lang),
+                          subtitle: '${ignoredItems.length}',
+                          action: TextButton(
+                            onPressed: () => setState(() => _ignored.clear()),
+                            child: Text(
+                              AppStrings.get('restock_clear', lang),
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        ...ignoredItems.map((item) => _MutedItemRow(item: item, lang: lang)),
                       ],
                     ],
                   ),
                 ),
     );
   }
+}
+
+class _Purchase {
+  final DateTime date;
+  final double quantity;
+  final double unitPrice;
+  const _Purchase({
+    required this.date,
+    required this.quantity,
+    required this.unitPrice,
+  });
 }
 
 class _RestockItem {
@@ -200,6 +290,8 @@ class _RestockItem {
   final DateTime nextDue;
   final int daysUntilDue;
   final int purchaseCount;
+  final double avgQuantity;
+  final double latestUnitPrice;
 
   _RestockItem({
     required this.name,
@@ -208,7 +300,11 @@ class _RestockItem {
     required this.nextDue,
     required this.daysUntilDue,
     required this.purchaseCount,
+    required this.avgQuantity,
+    required this.latestUnitPrice,
   });
+
+  double get estimatedLineCost => latestUnitPrice * avgQuantity;
 }
 
 class _SectionHeader extends StatelessWidget {
@@ -225,9 +321,22 @@ class _SectionHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFFF2F2F5))),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
               if (subtitle != null)
-                Text(subtitle!, style: const TextStyle(fontSize: 12, color: Color(0xFF8888A0))),
+                Text(
+                  subtitle!,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
             ],
           ),
         ),
@@ -238,8 +347,14 @@ class _SectionHeader extends StatelessWidget {
 }
 
 class _BasketCostCard extends StatelessWidget {
-  final List<_RestockItem> items;
-  const _BasketCostCard({required this.items});
+  final int itemCount;
+  final double estBudget;
+  final String lang;
+  const _BasketCostCard({
+    required this.itemCount,
+    required this.estBudget,
+    required this.lang,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -255,23 +370,44 @@ class _BasketCostCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.shopping_basket_outlined, color: Colors.white, size: 32),
-          const SizedBox(width: 16),
+          const Icon(Icons.shopping_basket_outlined, color: Colors.white, size: 28),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${min(items.length, 5)} items due for restock',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  '$itemCount ${AppStrings.get('restock_items_due', lang)}',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
                 ),
                 const SizedBox(height: 2),
-                const Text(
-                  'Tap items to mark as bought',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15),
+                Text(
+                  AppStrings.get('restock_tap_hint', lang),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
                 ),
               ],
             ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                AppStrings.get('restock_est_budget', lang),
+                style: const TextStyle(color: Colors.white70, fontSize: 10),
+              ),
+              Text(
+                '${estBudget.toStringAsFixed(2)} AZN',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -281,8 +417,26 @@ class _BasketCostCard extends StatelessWidget {
 
 class _RestockCard extends StatelessWidget {
   final _RestockItem item;
+  final String lang;
   final VoidCallback onBought;
-  const _RestockCard({required this.item, required this.onBought});
+  final VoidCallback onIgnore;
+
+  const _RestockCard({
+    required this.item,
+    required this.lang,
+    required this.onBought,
+    required this.onIgnore,
+  });
+
+  String _urgencyText() {
+    if (item.daysUntilDue < 0) {
+      return '${item.daysUntilDue.abs()} ${AppStrings.get('restock_days_overdue', lang)}';
+    }
+    if (item.daysUntilDue == 0) {
+      return AppStrings.get('restock_due_today', lang);
+    }
+    return '${AppStrings.get('restock_due_in', lang)} ${item.daysUntilDue} ${AppStrings.get('restock_days', lang)}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -294,84 +448,129 @@ class _RestockCard extends StatelessWidget {
             ? Colors.orange.shade600
             : Colors.green.shade600;
 
-    String urgencyText;
-    if (isOverdue) {
-      urgencyText = '${item.daysUntilDue.abs()} days overdue';
-    } else if (item.daysUntilDue == 0) {
-      urgencyText = 'Due today';
-    } else {
-      urgencyText = 'Due in ${item.daysUntilDue} days';
-    }
-
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF18181C),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        leading: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
-            isOverdue ? Icons.warning_rounded : Icons.shopping_cart_outlined,
-            color: color,
-            size: 22,
-          ),
-        ),
-        title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-        subtitle: Column(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(urgencyText, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w500)),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isOverdue ? Icons.warning_rounded : Icons.shopping_cart_outlined,
+                    color: color,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.name,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                      Text(
+                        _urgencyText(),
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '${item.estimatedLineCost.toStringAsFixed(2)} AZN',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             Text(
-              'Every ${item.avgDays} days  •  ${item.purchaseCount}x bought',
-              style: const TextStyle(color: Color(0xFF8888A0), fontSize: 11),
+              '${AppStrings.get('restock_every', lang)} ${item.avgDays} ${AppStrings.get('restock_days', lang)} · '
+              '${AppStrings.get('restock_avg_qty', lang)} ${item.avgQuantity.toStringAsFixed(1)} · '
+              '${AppStrings.get('restock_latest_price', lang)} ${item.latestUnitPrice.toStringAsFixed(2)} AZN',
+              style: TextStyle(
+                fontSize: 11,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: onIgnore,
+                  child: Text(AppStrings.get('restock_ignore', lang)),
+                ),
+                const SizedBox(width: 4),
+                FilledButton.tonal(
+                  onPressed: onBought,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFE8F5E9),
+                    foregroundColor: const Color(0xFF1B5E20),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  ),
+                  child: Text(
+                    AppStrings.get('restock_bought', lang),
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
             ),
           ],
-        ),
-        trailing: TextButton(
-          onPressed: onBought,
-          style: TextButton.styleFrom(
-            backgroundColor: const Color(0xFFE8F5E9),
-            foregroundColor: const Color(0xFF1B5E20),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          ),
-          child: const Text('Bought', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
         ),
       ),
     );
   }
 }
 
-class _BoughtCard extends StatelessWidget {
+class _MutedItemRow extends StatelessWidget {
   final _RestockItem item;
-  const _BoughtCard({required this.item});
+  final String lang;
+  const _MutedItemRow({required this.item, required this.lang});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF18181C),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Row(
-        children: [
-          const Icon(Icons.check_circle, color: Color(0xFF1B5E20), size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(item.name, style: const TextStyle(color: Color(0xFF8888A0), fontSize: 14, decoration: TextDecoration.lineThrough, decorationColor: Color(0xFF8888A0))),
-          ),
-        ],
+      child: Text(
+        item.name,
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          fontSize: 14,
+          decoration: TextDecoration.lineThrough,
+        ),
       ),
     );
   }
@@ -398,12 +597,25 @@ class _EmptyState extends StatelessWidget {
             child: const Icon(Icons.shopping_cart_outlined, size: 44, color: Color(0xFF1B5E20)),
           ),
           const SizedBox(height: 20),
-          Text(AppStrings.get('no_restock_yet', lang), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFF2F2F5))),
-          const SizedBox(height: 8),
           Text(
-            AppStrings.get('restock_scan_hint', lang),
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 14, color: Color(0xFF8888A0)),
+            AppStrings.get('no_restock_yet', lang),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Text(
+              AppStrings.get('restock_scan_hint', lang),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
           ),
           const SizedBox(height: 20),
           OutlinedButton.icon(

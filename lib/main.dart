@@ -11,27 +11,24 @@ import 'app_state.dart';
 import 'screens/splash_screen.dart';
 import 'screens/auth_gate_screen.dart';
 import 'services/notification_service.dart';
+import 'services/user_profile_service.dart';
 
-Future<void> main() async {
-  debugPrint('[INIT] WidgetsFlutterBinding.ensureInitialized()');
-  WidgetsFlutterBinding.ensureInitialized();
-
+Future<void> _initializeServices() async {
   try {
     debugPrint('[INIT] Supabase.initialize() starting...');
     await Supabase.initialize(
       url: 'https://mwookghnlhmseayeyycj.supabase.co',
       anonKey:
           'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13b29rZ2hubGhtc2VheWV5eWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzNzMyMjEsImV4cCI6MjA5NDk0OTIyMX0.lTcGXJ2u5V_jJTzwDQFagCmLE7cRrrRcCPpuAM6E-d8',
-    );
+    ).timeout(const Duration(seconds: 15));
     debugPrint('[INIT] Supabase.initialize() OK');
   } catch (e, st) {
     debugPrint('[INIT] Supabase.initialize() FAILED: $e\n$st');
-    // App still launches — auth screens will show an error state
   }
 
   try {
     debugPrint('[INIT] Firebase.initializeApp() starting...');
-    await Firebase.initializeApp();
+    await Firebase.initializeApp().timeout(const Duration(seconds: 15));
     FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
     PlatformDispatcher.instance.onError = (error, stack) {
       FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
@@ -40,16 +37,19 @@ Future<void> main() async {
     debugPrint('[INIT] Firebase.initializeApp() OK');
   } catch (e, st) {
     debugPrint('[INIT] Firebase.initializeApp() FAILED: $e\n$st');
-    // Firebase/Crashlytics is optional — app works without it
   }
 
   try {
     debugPrint('[INIT] NotificationService.init() starting...');
-    await NotificationService.init();
+    await NotificationService.init().timeout(const Duration(seconds: 10));
     debugPrint('[INIT] NotificationService.init() OK');
   } catch (e, st) {
     debugPrint('[INIT] NotificationService.init() FAILED: $e\n$st');
   }
+
+  try {
+    UserProfileService.warmCache();
+  } catch (_) {}
 
   try {
     final prefs = await SharedPreferences.getInstance();
@@ -57,9 +57,73 @@ Future<void> main() async {
     final themePref = prefs.getString('theme_mode') ?? 'light';
     currentThemeMode.value = themePref == 'dark' ? ThemeMode.dark : ThemeMode.light;
   } catch (_) {}
+}
 
+void main() {
+  debugPrint('[INIT] WidgetsFlutterBinding.ensureInitialized()');
+  WidgetsFlutterBinding.ensureInitialized();
   debugPrint('[INIT] runApp() called');
-  runApp(const BalanzoApp());
+  runApp(const AppBootstrap());
+}
+
+/// Shows UI immediately so iOS never sits on a blank white storyboard while
+/// Firebase/Supabase/notifications initialize on a background isolate.
+class AppBootstrap extends StatefulWidget {
+  const AppBootstrap({super.key});
+
+  @override
+  State<AppBootstrap> createState() => _AppBootstrapState();
+}
+
+class _AppBootstrapState extends State<AppBootstrap> {
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeServices().whenComplete(() {
+      if (mounted) setState(() => _ready = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_ready) {
+      return const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: _StartupSplash(),
+      );
+    }
+    return const BalanzoApp();
+  }
+}
+
+class _StartupSplash extends StatelessWidget {
+  const _StartupSplash();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: Color(0xFF1B5E20),
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.account_balance_wallet, color: Colors.white, size: 56),
+            SizedBox(height: 24),
+            Text(
+              'Balanzo',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 40,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class BalanzoApp extends StatefulWidget {

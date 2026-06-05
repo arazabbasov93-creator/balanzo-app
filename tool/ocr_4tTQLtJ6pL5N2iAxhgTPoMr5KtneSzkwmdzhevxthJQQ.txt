@@ -1,0 +1,50 @@
+Object name: aRZAQ MAĞAZASI
+Object address: AZ1052 BAKI ŞAHARİ
+NaRİMANOV RAYONU YUSİF VAZİR
+ÇaMaNZaMİNLİ ev.123 m.-
+Object code: 1506231242-15001
+Taxpayer name: XALILOV MIRİSLAM SAMİR
+OGLU
+TIN: 1506231242
+Sale receipt Nº 183373
+04.06.2026
+Cashier:
+kassir. Date:
+Time:
+08:35:35
+Product
+Quantity Price Total
+0.85
+3.40
+SAVUSKI YOQURT ERIK
+(pc)
+*Trade markup: 18%
+Total
+3.40
+*VAT 18% = 0.52
+3.40
+*Total tax = 0.52
+*ХЖЖ*хх*х*ххх**хх***ххх**ххх**х*х*************
+Payment type
+0.00
+Cashless:
+3.40
+Cash:
+3.40
+* Paid cash:
+0.00
+* Change:
+Bonus:
+0.00
+0.00
+Prepayment:
+0.00
+Credit:
+Receipt order in shift: 44
+Cash register model: SUNMI V1S
+Cash register factory number: VS43229W31335
+Fiscal ID: 4tTQLt]6pL5N
+Cashbox registration number: 0000174348
+www.e-kassa.gov.az
+VAT refund
+No VAT refund on the receipt.

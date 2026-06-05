@@ -1,0 +1,57 @@
+Object name: aRZAQ MAĞAZASI
+Object address: AZ1052 BAKI ŞAHARİ
+NaRİMANOV RAYONU YUSİF VAZiR
+ÇaMaNZaMİNLİ ev.123 m.-
+Object code: 1506231242-15001
+Taxpayer name: XALILOV MİRİSLAM SAMİR
+OGLU
+TIN: 1506231242
+Sale receipt Nº 183374
+kassir. Date:
+04.06.2026
+Cashier:
+08:36:09
+Time:
+Product
+Quantity Price Total
+1
+OZMO OGOPOGO 30 QR
+0.60 0.60
+(pc)
+SOKOLADLI
+*Trade markup: 18%
+1.30
+1
+1.30
+AQUSA MIXS 200ML
+(pc)
+*Trade markup: 18%
+1.90
+Total
+*VAT 18% = 0.29
+1.90
+*Total tax = 0.29
+**********»
+Payment type
+Cashless:
+0.00
+Cash:
+1.90
+* Paid cash:
+1.90
+0.00
+* Change:
+Bonus:
+0.00
+0.00
+Prepayment:
+Credit:
+0.00
+Receipt order in shift: 45
+Cash register model: SUNMİ VIS
+Cash register factory number: VS43229W31335
+Fiscal ID: FX6N23EBFrAT
+Cashbox registration number: 0000174348
+www.e-kassa.gov.az
+VAT refund
+No VAT refund on the receipt.

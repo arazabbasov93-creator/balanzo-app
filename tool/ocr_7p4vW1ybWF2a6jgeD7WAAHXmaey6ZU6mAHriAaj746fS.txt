@@ -1,0 +1,57 @@
+Object name: QARIŞIQ MALLAR
+MAĞAZASI
+Object address: AZ1052 BAKI SAHARİ
+NARİMANOV RAYONU TABRİZ ev.106 A AĞA
+NEMATULLA KÜÇaSİ İLa KaSİŞMa
+Object code: 1502989081-15001
+Taxpayer name: "BEST BRANDS GROUP MA"
+MaHDUD MASULİYYaTLİ CaMİYYaTi
+TIN: 1502989081
+Sale receipt Nº 270978
+30.05.2026
+Cashier: Fatima Rahimova Date:
+Time:
+15:41:52
+**********************************************
+Product
+Quantity Price Total
+(pc)
+Dast (ANTHRACITE, 5y .)
+1
+19.9 19.9
+(8684693106267)
+*VAT: 18%
+0.10
+0.10
+1
+Poşet S ()
+(pc)
+*VAT: 18%
+Total
+20.09
+20.09
+*VAT 18% = 3.06
+*Total tax = 3.06
+Payment type
+Cashless:
+0.00
+Cash:
+20.09
+* Paid cash:
+100.10
+*Change:
+80.01
+Bonus:
+0.00
+0.00
+Prepayment:
+0.00
+Credit:
+Receipt order in shift: 74
+Cash register model: NBA FiscalBox
+Cash register factory number: 900121030399
+Fiscal ID: 7p4vW1ybWF2a
+Cashbox registration number: 0000042934
+www.e-kassa.gov.az
+VAT refund
+No VAT refund on the receipt.

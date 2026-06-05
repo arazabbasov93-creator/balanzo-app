@@ -136,6 +136,19 @@ class NotificationService {
     await prefs.remove(_historyKey);
   }
 
+  static Future<void> sendFamilyBudgetAlert({
+    required String memberName,
+    required double overspend,
+  }) async {
+    await _show(
+      id: 104,
+      title: 'Family budget alert',
+      body:
+          '$memberName is over their budget by ${overspend.toStringAsFixed(2)} AZN this month.',
+      type: 'budget',
+    );
+  }
+
   /// Call after first receipt scan to ask permission (T103).
   static Future<void> requestIfNotAsked() async {
     if (!await hasPermissionBeenAsked()) {

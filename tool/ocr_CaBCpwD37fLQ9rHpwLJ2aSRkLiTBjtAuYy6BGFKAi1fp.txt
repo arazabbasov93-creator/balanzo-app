@@ -1,0 +1,79 @@
+Object name: APTEK
+Object address: AZ1033 BAKI ŞAHARİ
+NARiMANOV RAYONU AĞA NEMATULLA
+ev.63
+Object code: 1500072561-15002
+Taxpayer name: "AZARI MED" QAPAL
+SAHMDAR CAMİYYATI
+TIN: 1500072561
+Sale receipt Nº 259606
+Cashier:
+009619 Date:
+09.05.2026
+Time:
+08:53:02
+**********************************************
+Quantity Price Total
+Product
+1
+8.59 8.59
+OTIPAKS 15ml kapli (40 (pc)
++10) mq ml
+*VAT: 18%
+4.64 4.64
+1
+OTRIVIN 0.05% 10ml ka (pc)
+pli
+*VAT: 18%
+1
+4.45 4.45
+MEKSUN 7.5mg N10
+(pc)
+*VAT: 18%
+21.4 21.4
+RODINIR 250mg/5ml 60 (pc)
+ml (cefdinir)
+*VAT: 18%
+1
+KLOK ZEFERAN 30×40 (1
+0.10 0.10
+(pc)
+kq=54) (EDED)|
+*VAT: 18%
+PULMOTEN 150ml
+(pc)
+23.2 23.2
+1
+*VAT: 18%
+0.00 0.00
+OTRIVIN SALFET (hediyy (pc)
+e)
+*VAT: 18%
+Total
+62.38
+*VAT 18% = 9.52
+62.38
+*Total tax - 9.52
+Payment type
+0.00
+Cashless:
+Cash:
+62.38
+* Paid cash:
+100.00
+37.62
+* Change:
+Bonus:
+0.00
+0.00
+Prepayment:
+Credit:
+0.00
+Receipt order in shift: 10
+Cash register model: TPS575 Smart POS
+Cash register factory number: 2001G57500302086
+Fiscal ID: CaBCpwD37fLQ
+Cashbox registration number: 0000083654
+www.e-kassa.gov.az
+VAT refund
+No VAT refund on the receipt.

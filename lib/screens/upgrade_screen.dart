@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../app_state.dart';
+import '../l10n/app_strings.dart';
 import '../services/analytics_service.dart';
 import '../services/subscription_service.dart';
 
@@ -18,8 +20,17 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
   @override
   void initState() {
     super.initState();
+    currentLanguage.addListener(_onLangChange);
     AnalyticsService.log('upgrade_screen_viewed');
   }
+
+  @override
+  void dispose() {
+    currentLanguage.removeListener(_onLangChange);
+    super.dispose();
+  }
+
+  void _onLangChange() => setState(() {});
 
   Future<void> _upgrade() async {
     setState(() => _loading = true);
@@ -27,7 +38,10 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
       await SubscriptionService.upgradeTo(_selected);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Subscription updated! Enjoy Balanzo Premium.'), backgroundColor: Color(0xFF1B5E20)),
+        SnackBar(
+          content: Text(AppStrings.get('upgrade_success', currentLanguage.value)),
+          backgroundColor: const Color(0xFF1B5E20),
+        ),
       );
       Navigator.of(context).pop();
     } catch (e) {
@@ -42,10 +56,16 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final lang = currentLanguage.value;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Upgrade Balanzo', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          AppStrings.get('upgrade_screen_title', lang),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: const Color(0xFF1B5E20),
         foregroundColor: Colors.white,
         elevation: 0,
@@ -70,59 +90,60 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                 children: [
                   const Icon(Icons.auto_awesome, color: Colors.amber, size: 48),
                   const SizedBox(height: 12),
-                  const Text('Unlock the Full Balanzo', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                  Text(
+                    AppStrings.get('upgrade_hero_title', lang),
+                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 8),
-                  Text('AI-powered insights, family sharing, and more', style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 14)),
+                  Text(
+                    AppStrings.get('upgrade_hero_subtitle', lang),
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 14),
+                    textAlign: TextAlign.center,
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 24),
-            const Text('Choose your plan', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+            Text(
+              AppStrings.get('upgrade_choose_plan', lang),
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: onSurface),
+            ),
             const SizedBox(height: 12),
-
             _FreePlanCard(
+              lang: lang,
               selected: _selected == SubscriptionTier.free,
               onTap: () => setState(() => _selected = SubscriptionTier.free),
             ),
             const SizedBox(height: 10),
-
             _PaidPlanCard(
-              title: 'AI Premium',
+              title: AppStrings.get('ai_premium', lang),
               color: const Color(0xFF1B5E20),
-              badge: 'Most Popular',
-              features: const [
-                'Unlimited receipt scanning',
-                'Unlimited AI questions',
-                'Price anomaly alerts',
-                'Export to PDF',
-                'Priority support',
-              ],
+              badge: AppStrings.get('upgrade_most_popular', lang),
+              featureColor: const Color(0xFF212121),
+              features: AppStrings.upgradeAiPremiumFeatures(lang),
               monthlyPrice: SubscriptionService.aiPremiumMonthly,
               annualPrice: SubscriptionService.aiPremiumAnnual,
               isAnnual: _aiAnnual,
               onToggle: (annual) => setState(() => _aiAnnual = annual),
               selected: _selected == SubscriptionTier.aiPremium,
               onTap: () => setState(() => _selected = SubscriptionTier.aiPremium),
+              lang: lang,
             ),
             const SizedBox(height: 10),
-
             _PaidPlanCard(
-              title: 'Family Plan',
+              title: AppStrings.get('family_plan', lang),
               color: const Color(0xFF1B5E20),
-              features: const [
-                'Everything in AI Premium',
-                'Up to 6 family members',
-                'Shared budget tracking',
-                'Family spending insights',
-              ],
+              featureColor: const Color(0xFF212121),
+              features: AppStrings.upgradeFamilyFeatures(lang),
               monthlyPrice: SubscriptionService.familyPlanMonthly,
               annualPrice: SubscriptionService.familyPlanAnnual,
               isAnnual: _familyAnnual,
               onToggle: (annual) => setState(() => _familyAnnual = annual),
               selected: _selected == SubscriptionTier.familyPlan,
               onTap: () => setState(() => _selected = SubscriptionTier.familyPlan),
+              lang: lang,
             ),
-
             const SizedBox(height: 28),
             if (_selected != SubscriptionTier.free)
               SizedBox(
@@ -137,14 +158,17 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                   ),
                   child: _loading
                       ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('Upgrade Now', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      : Text(
+                          AppStrings.get('upgrade_now', lang),
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
                 ),
               ),
             const SizedBox(height: 12),
             Center(
               child: Text(
-                'Cancel anytime. Payments processed securely.',
-                style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                AppStrings.get('upgrade_cancel_note', lang),
+                style: TextStyle(color: onSurfaceVariant, fontSize: 12),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -156,10 +180,15 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
 }
 
 class _FreePlanCard extends StatelessWidget {
+  final String lang;
   final bool selected;
   final VoidCallback onTap;
 
-  const _FreePlanCard({required this.selected, required this.onTap});
+  const _FreePlanCard({
+    required this.lang,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -185,17 +214,25 @@ class _FreePlanCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Free', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
+                  Text(
+                    AppStrings.get('free_plan', lang),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade600),
+                  ),
                   const SizedBox(height: 4),
-                  Text('Free — forever', style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                  Text(
+                    AppStrings.get('upgrade_free_forever', lang),
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                  ),
                   const SizedBox(height: 8),
-                  ...['Unlimited receipt scanning', 'AI chat — last 7 days data', '1 AI question per week', 'Basic dashboard', 'Restock reminders'].map((f) => Padding(
+                  ...AppStrings.upgradeFreeFeatures(lang).map((f) => Padding(
                         padding: const EdgeInsets.symmetric(vertical: 2),
                         child: Row(
                           children: [
                             Icon(Icons.check_circle, size: 14, color: Colors.grey.shade400),
                             const SizedBox(width: 6),
-                            Text(f, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                            Expanded(
+                              child: Text(f, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                            ),
                           ],
                         ),
                       )),
@@ -218,31 +255,35 @@ class _PaidPlanCard extends StatelessWidget {
   final Color color;
   final String? badge;
   final List<String> features;
+  final Color featureColor;
   final double monthlyPrice;
   final double annualPrice;
   final bool isAnnual;
   final ValueChanged<bool> onToggle;
   final bool selected;
   final VoidCallback onTap;
+  final String lang;
 
   const _PaidPlanCard({
     required this.title,
     required this.color,
     this.badge,
     required this.features,
+    required this.featureColor,
     required this.monthlyPrice,
     required this.annualPrice,
     required this.isAnnual,
     required this.onToggle,
     required this.selected,
     required this.onTap,
+    required this.lang,
   });
 
   @override
   Widget build(BuildContext context) {
     final price = isAnnual
-        ? '\$${annualPrice.toStringAsFixed(2)} / year'
-        : '\$${monthlyPrice.toStringAsFixed(2)} / month';
+        ? '\$${annualPrice.toStringAsFixed(2)} / ${AppStrings.get('upgrade_annual', lang).toLowerCase()}'
+        : '\$${monthlyPrice.toStringAsFixed(2)} / ${AppStrings.get('upgrade_monthly', lang).toLowerCase()}';
 
     return GestureDetector(
       onTap: onTap,
@@ -268,7 +309,12 @@ class _PaidPlanCard extends StatelessWidget {
                 Expanded(
                   child: Row(
                     children: [
-                      Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+                      Flexible(
+                        child: Text(
+                          title,
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color),
+                        ),
+                      ),
                       if (badge != null) ...[
                         const SizedBox(width: 8),
                         Container(
@@ -277,7 +323,10 @@ class _PaidPlanCard extends StatelessWidget {
                             color: Colors.amber.shade700,
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: Text(badge!, style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
+                          child: Text(
+                            badge!,
+                            style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ],
                     ],
@@ -292,9 +341,19 @@ class _PaidPlanCard extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
-                _BillingPill(label: 'Monthly', active: !isAnnual, color: color, onTap: () => onToggle(false)),
+                _BillingPill(
+                  label: AppStrings.get('upgrade_monthly', lang),
+                  active: !isAnnual,
+                  color: color,
+                  onTap: () => onToggle(false),
+                ),
                 const SizedBox(width: 8),
-                _BillingPill(label: 'Annual', active: isAnnual, color: color, onTap: () => onToggle(true)),
+                _BillingPill(
+                  label: AppStrings.get('upgrade_annual', lang),
+                  active: isAnnual,
+                  color: color,
+                  onTap: () => onToggle(true),
+                ),
                 if (isAnnual) ...[
                   const SizedBox(width: 8),
                   Container(
@@ -304,7 +363,10 @@ class _PaidPlanCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.green.shade300),
                     ),
-                    child: Text('Save 16%', style: TextStyle(fontSize: 10, color: Colors.green.shade700, fontWeight: FontWeight.bold)),
+                    child: Text(
+                      AppStrings.get('upgrade_save_16', lang),
+                      style: TextStyle(fontSize: 10, color: Colors.green.shade700, fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ],
@@ -318,7 +380,7 @@ class _PaidPlanCard extends StatelessWidget {
                     children: [
                       Icon(Icons.check_circle, size: 16, color: color),
                       const SizedBox(width: 8),
-                      Expanded(child: Text(f, style: const TextStyle(fontSize: 13))),
+                      Expanded(child: Text(f, style: TextStyle(fontSize: 13, color: featureColor))),
                     ],
                   ),
                 )),

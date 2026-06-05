@@ -1,4 +1,5 @@
 import '../models/receipt.dart';
+import '../utils/receipt_numbers.dart';
 
 /// Parses canonical OCR output (STORE/DATE/TOTAL/ITEM lines) without AI.
 class StructuredReceiptParser {
@@ -40,9 +41,9 @@ class StructuredReceiptParser {
       if (parts.length < 4) continue;
 
       final name = parts[0].trim();
-      final qty = _num(parts[1]);
-      final unit = _num(parts[2]);
-      final itemTotal = _num(parts[3]);
+      final qty = ReceiptNumbers.parseLabeled(parts[1]);
+      final unit = ReceiptNumbers.parseLabeled(parts[2]);
+      final itemTotal = ReceiptNumbers.parseLabeled(parts[3]);
       if (name.isEmpty) continue;
       if (itemTotal < 0) continue;
 
@@ -68,8 +69,43 @@ class StructuredReceiptParser {
     );
   }
 
-  static double _num(String part) {
-    final m = RegExp(r'([\d.]+)').firstMatch(part.replaceAll(',', '.'));
-    return double.tryParse(m?.group(1) ?? '0') ?? 0;
+  /// Store + total (+ date) without line items — for partial OCR user can edit.
+  static Receipt? tryParseHeaderOnly(String text) {
+    if (!text.contains('STORE:') && !text.contains('TOTAL:')) return null;
+
+    String? store;
+    DateTime? date;
+    double? total;
+    double? vat;
+
+    for (final raw in text.split('\n')) {
+      final line = raw.trim();
+      if (line.isEmpty || line == '---') continue;
+      if (line.startsWith('STORE:')) {
+        store = line.substring(6).trim();
+      } else if (line.startsWith('DATE:')) {
+        date = DateTime.tryParse(line.substring(5).trim());
+      } else if (line.startsWith('TOTAL:')) {
+        final m = RegExp(r'([\d.]+)').firstMatch(line.substring(6));
+        if (m != null) total = double.tryParse(m.group(1)!);
+      } else if (line.startsWith('VAT:')) {
+        final m = RegExp(r'([\d.]+)').firstMatch(line.substring(4));
+        if (m != null) vat = double.tryParse(m.group(1)!);
+      }
+    }
+
+    if ((store == null || store.isEmpty) && (total == null || total <= 0)) {
+      return null;
+    }
+
+    return Receipt(
+      store: store?.isNotEmpty == true ? store : null,
+      date: date,
+      items: const [],
+      subtotal: 0,
+      vat: vat ?? 0,
+      total: total ?? 0,
+      currency: 'AZN',
+    );
   }
 }

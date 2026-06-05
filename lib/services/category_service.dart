@@ -3,36 +3,71 @@ import '../models/category.dart';
 
 class CategoryService {
   static final _db = Supabase.instance.client;
-  static String get _userId => _db.auth.currentUser!.id;
+  static String? get _userId => _db.auth.currentUser?.id;
+
+  /// In-memory catalog for UI when DB is unreachable (preview only).
+  static List<Category> localFallback() {
+    return defaultCategories.asMap().entries.map((e) {
+      final dc = e.value;
+      return Category(
+        id: 'local_${dc['name']}',
+        name: dc['name'] as String,
+        icon: dc['icon'] as String,
+        color: dc['color'] as int,
+        isDefault: true,
+      );
+    }).toList();
+  }
 
   static Future<List<Category>> fetchAll() async {
     try {
-      var rows = await _db
-          .from('categories')
-          .select()
-          .order('name');
-      var list = (rows as List)
-          .map((r) => Category.fromJson(r as Map<String, dynamic>))
-          .toList();
-      if (list.isEmpty) {
-        await seedDefaults();
-        rows = await _db.from('categories').select().order('name');
-        list = (rows as List)
-            .map((r) => Category.fromJson(r as Map<String, dynamic>))
-            .toList();
+      var list = await _fetchFromDb();
+      if (_userId != null) {
+        list = await _ensureDefaultCategoriesPresent(list);
       }
-      return list;
+      return list.isNotEmpty ? list : localFallback();
     } catch (_) {
-      return [];
+      return localFallback();
     }
   }
 
+  static Future<List<Category>> _fetchFromDb() async {
+    final rows = await _db.from('categories').select().order('name');
+    return (rows as List)
+        .map((r) => Category.fromJson(r as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Creates missing default-named categories for the signed-in user.
+  /// Server defaults (is_default=true) are visible via RLS; if none exist,
+  /// user-owned copies are created (RLS allows insert with user_id).
+  static Future<List<Category>> _ensureDefaultCategoriesPresent(
+    List<Category> existing,
+  ) async {
+    final names = existing.map((c) => c.name.toLowerCase()).toSet();
+    var created = false;
+    for (final dc in defaultCategories) {
+      final name = dc['name'] as String;
+      if (names.contains(name.toLowerCase())) continue;
+      final cat = await create(
+        name,
+        dc['icon'] as String,
+        dc['color'] as int,
+      );
+      if (cat != null) created = true;
+    }
+    if (created) return _fetchFromDb();
+    return existing;
+  }
+
   static Future<Category?> create(String name, String icon, int color) async {
+    final userId = _userId;
+    if (userId == null) return null;
     try {
       final row = await _db
           .from('categories')
           .insert({
-            'user_id': _userId,
+            'user_id': userId,
             'name': name,
             'icon': icon,
             'color': color,
@@ -49,24 +84,6 @@ class CategoryService {
   static Future<void> delete(String id) async {
     try {
       await _db.from('categories').delete().eq('id', id);
-    } catch (_) {}
-  }
-
-  /// Seeds default categories. Safe to call multiple times.
-  static Future<void> seedDefaults() async {
-    try {
-      final existing = await _db.from('categories').select('id').limit(1);
-      if ((existing as List).isNotEmpty) return;
-      await _db.from('categories').insert(
-        defaultCategories
-            .map((c) => {
-                  'name': c['name'],
-                  'icon': c['icon'],
-                  'color': c['color'],
-                  'is_default': true,
-                })
-            .toList(),
-      );
     } catch (_) {}
   }
 }

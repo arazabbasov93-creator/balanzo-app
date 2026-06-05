@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../app_state.dart';
 import '../models/receipt.dart';
 import '../models/category.dart';
+import '../services/category_matcher.dart';
 import '../services/receipt_service.dart';
 import '../services/category_service.dart';
+import '../services/family_service.dart';
+import '../utils/receipt_numbers.dart';
 import '../widgets/category_picker_sheet.dart';
 import '../widgets/copyable_fiscal_id.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -15,18 +19,18 @@ class _ItemEdit {
   final TextEditingController nameCtrl;
   final TextEditingController qtyCtrl;
   final TextEditingController priceCtrl;
+  final double lineTotal;
 
   _ItemEdit({
     this.id,
     required String name,
     required double qty,
     required double price,
+    required double totalPrice,
   })  : nameCtrl = TextEditingController(text: name),
-        qtyCtrl = TextEditingController(
-            text: qty == qty.roundToDouble()
-                ? qty.toInt().toString()
-                : qty.toStringAsFixed(2)),
-        priceCtrl = TextEditingController(text: price.toStringAsFixed(2));
+        lineTotal = totalPrice,
+        qtyCtrl = TextEditingController(text: ReceiptNumbers.formatQuantity(qty)),
+        priceCtrl = TextEditingController(text: ReceiptNumbers.formatUnitPrice(price));
 
   void dispose() {
     nameCtrl.dispose();
@@ -59,6 +63,7 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
   bool _editMode = false;
   bool _saving = false;
   bool _refreshing = false;
+  bool _scopeUpdating = false;
   TextEditingController? _storeCtrl;
   TextEditingController? _dateCtrl;
   List<_ItemEdit> _itemEdits = [];
@@ -78,7 +83,12 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
   Future<_DetailData> _load() async {
     final row = await ReceiptService.fetchById(widget.receiptId);
     final cats = await CategoryService.fetchAll();
-    final data = _DetailData(row: row, categories: cats);
+    final family = await FamilyService.fetchMyFamily();
+    final data = _DetailData(
+      row: row,
+      categories: cats,
+      hasFamily: family != null,
+    );
     _cachedData = data;
     return data;
   }
@@ -101,6 +111,7 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
                   '',
               qty: (item['quantity'] as num?)?.toDouble() ?? 1.0,
               price: (item['unit_price'] as num?)?.toDouble() ?? 0.0,
+              totalPrice: (item['total_price'] as num?)?.toDouble() ?? 0.0,
             ))
         .toList();
     setState(() => _editMode = true);
@@ -155,7 +166,7 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
           'name_raw': name,
           'quantity': qty,
           'unit_price': unitPrice,
-          'total_price': qty * unitPrice,
+          'total_price': edit.lineTotal,
         };
         if (edit.id != null) {
           await supabase.from('receipt_items').update(payload).eq('id', edit.id!);
@@ -183,6 +194,25 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
           backgroundColor: Colors.red.shade700,
         ));
       }
+    }
+  }
+
+  Future<void> _setFamilyScope(bool asFamily) async {
+    if (_scopeUpdating) return;
+    setState(() => _scopeUpdating = true);
+    try {
+      await ReceiptService.setFamilyScope(widget.receiptId, asFamily: asFamily);
+      notifyReceiptsChanged();
+      _refresh();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red.shade700,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _scopeUpdating = false);
     }
   }
 
@@ -287,7 +317,12 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
           fiscalId: data.row['fiscal_id'] as String?,
           items: rowItems,
           categories: data.categories,
-          onCategoryChanged: (itemId, catId) => _assignCategory(itemId, catId),
+          hasFamily: data.hasFamily,
+          isFamilyScope: data.isFamilyScope,
+          scopeUpdating: _scopeUpdating,
+          onScopeChanged: _setFamilyScope,
+          onCategoryChanged: (itemId, catId) =>
+              _assignCategory(itemId, catId, data.categories),
         );
       },
     );
@@ -328,7 +363,7 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
             TextButton.icon(
               onPressed: () {
                 setState(() {
-                  _itemEdits.add(_ItemEdit(name: '', qty: 1, price: 0));
+                  _itemEdits.add(_ItemEdit(name: '', qty: 1, price: 0, totalPrice: 0));
                 });
               },
               icon: const Icon(Icons.add, size: 18),
@@ -458,11 +493,16 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
     ));
   }
 
-  Future<void> _assignCategory(String itemId, String? catId) async {
-    await Supabase.instance.client
-        .from('receipt_items')
-        .update({'category_id': catId})
-        .eq('id', itemId);
+  Future<void> _assignCategory(
+    String itemId,
+    String? catId,
+    List<Category> categories,
+  ) async {
+    await ReceiptService.updateItemCategory(
+      itemId: itemId,
+      categoryId: catId,
+      categoryLabel: CategoryMatcher.categoryLabel(catId, categories),
+    );
     if (mounted) _refresh();
   }
 
@@ -540,6 +580,7 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
     if (confirmed == true && context.mounted) {
       try {
         await ReceiptService.delete(widget.receiptId);
+        notifyReceiptsChanged();
         if (context.mounted) Navigator.of(context).pop();
       } catch (e) {
         if (context.mounted) {
@@ -556,7 +597,15 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
 class _DetailData {
   final Map<String, dynamic> row;
   final List<Category> categories;
-  _DetailData({required this.row, required this.categories});
+  final bool hasFamily;
+
+  bool get isFamilyScope => row['family_id'] != null;
+
+  _DetailData({
+    required this.row,
+    required this.categories,
+    required this.hasFamily,
+  });
 }
 
 // ── Read-only body ─────────────────────────────────────────────────────────────
@@ -566,6 +615,10 @@ class _ReceiptBody extends StatelessWidget {
   final String? fiscalId;
   final List<Map<String, dynamic>> items;
   final List<Category> categories;
+  final bool hasFamily;
+  final bool isFamilyScope;
+  final bool scopeUpdating;
+  final void Function(bool asFamily)? onScopeChanged;
   final void Function(String itemId, String? catId) onCategoryChanged;
 
   const _ReceiptBody({
@@ -573,6 +626,10 @@ class _ReceiptBody extends StatelessWidget {
     this.fiscalId,
     required this.items,
     required this.categories,
+    this.hasFamily = false,
+    this.isFamilyScope = false,
+    this.scopeUpdating = false,
+    this.onScopeChanged,
     required this.onCategoryChanged,
   });
 
@@ -582,6 +639,25 @@ class _ReceiptBody extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       children: [
         _Header(receipt: receipt),
+        if (onScopeChanged != null) ...[
+          const SizedBox(height: 16),
+          _FamilyScopeToggle(
+            isFamily: isFamilyScope,
+            updating: scopeUpdating,
+            onChanged: onScopeChanged!,
+          ),
+          if (!hasFamily)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Create a family in Profile to share this receipt.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+        ],
         if (fiscalId != null && fiscalId!.isNotEmpty) ...[
           const SizedBox(height: 12),
           CopyableFiscalIdRow(fiscalId: fiscalId!),
@@ -630,6 +706,117 @@ class _ReceiptBody extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _FamilyScopeToggle extends StatelessWidget {
+  final bool isFamily;
+  final bool updating;
+  final ValueChanged<bool> onChanged;
+
+  const _FamilyScopeToggle({
+    required this.isFamily,
+    required this.updating,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Cost scope',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.black54,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _ScopeChip(
+                label: 'Personal',
+                icon: Icons.person_outline,
+                selected: !isFamily,
+                onTap: updating || !isFamily ? null : () => onChanged(false),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _ScopeChip(
+                label: 'Family',
+                icon: Icons.family_restroom_outlined,
+                selected: isFamily,
+                onTap: updating || isFamily ? null : () => onChanged(true),
+              ),
+            ),
+          ],
+        ),
+        if (updating)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
+      ],
+    );
+  }
+}
+
+class _ScopeChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  const _ScopeChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? const Color(0xFFE8F5E9) : Colors.grey.shade100,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? const Color(0xFF1B5E20) : Colors.grey.shade300,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: selected ? const Color(0xFF1B5E20) : Colors.black54,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: selected ? const Color(0xFF1B5E20) : Colors.black54,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -716,9 +903,14 @@ class _DbItemRow extends StatelessWidget {
     final unitPrice = (item['unit_price'] as num?)?.toDouble() ?? 0.0;
     final totalPrice = (item['total_price'] as num?)?.toDouble() ?? 0.0;
     final catId = item['category_id'] as String?;
+    final catLabel = item['category'] as String?;
     final cat = catId != null
         ? categories.where((c) => c.id == catId).firstOrNull
-        : null;
+        : (catLabel != null
+            ? categories
+                .where((c) => c.name.toLowerCase() == catLabel.toLowerCase())
+                .firstOrNull
+            : null);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),

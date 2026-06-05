@@ -47,3 +47,4 @@ app.*.map.json
 # Signing
 android/key.properties
 *.jks
+lib/config/anthropic_config.dart

@@ -34,6 +34,7 @@ class Category {
 const defaultCategories = [
   {'name': 'Grocery', 'icon': 'local_grocery_store', 'color': 0xFF4CAF50},
   {'name': 'Restaurant', 'icon': 'restaurant', 'color': 0xFFFF9800},
+  {'name': 'Tobacco', 'icon': 'smoking_rooms', 'color': 0xFF795548},
   {'name': 'Transport', 'icon': 'directions_car', 'color': 0xFF2196F3},
   {'name': 'Health', 'icon': 'local_pharmacy', 'color': 0xFFF44336},
   {'name': 'Clothing', 'icon': 'checkroom', 'color': 0xFF9C27B0},

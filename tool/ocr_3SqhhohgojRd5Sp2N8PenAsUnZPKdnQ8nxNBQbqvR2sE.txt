@@ -1,0 +1,55 @@
+Object name: ARZAQ MAĞAZASI
+Object address: AZ1052 BAKI ŞAHARİ
+NARİMANOV RAYONU YUSİF VAZİR
+ÇaMaNZAMİNLİ ev.123 m.-
+Object code: 1506231242-15001
+Taxpayer name: XALİLOV MİRİSLAM SAMİR
+OGLU
+TIN: 1506231242
+Sale receipt Nº 183376
+04.06.2026
+Cashier:
+kassir. Date:
+Time:
+08:37:31
+Quantity Price Total
+Product
+1
+2.90 2.90
+BLACK STYLE COMPACTS (pc)
+ILVER
+*Trade markup: 18%
+1.80
+1
+NAPITOK GO 0.5 L SILVER (pc)
+1.80
+8%
+*Trade markup: 18%
+Total
+4.70
+*VAT 18% = 0.72
+4.70
+*Total tax = 0.72
+Payment type
+Cashless:
+0.00
+4.70
+Cash:
+* Paid cash:
+4.70
+*Change:
+0.00
+Bonus:
+0.00
+0.00
+Prepayment:
+0.00
+Credit:
+Receipt order in shift: 47
+Cash register model: SUNMI V1S
+Cash register factory number: VS43229W31335
+Fiscal ID: 3SqhhohgojRd
+Cashbox registration number: 0000174348
+www.e-kassa.gov.az
+VAT refund
+No VAT refund on the receipt.

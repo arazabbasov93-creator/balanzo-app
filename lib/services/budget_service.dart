@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/budget.dart';
+import 'receipt_service.dart';
+import 'category_service.dart';
 
 class BudgetService {
   static final _db = Supabase.instance.client;
@@ -77,17 +79,17 @@ class BudgetService {
     final ids = (receiptRows as List).map((r) => r['id'] as String).toList();
     if (ids.isEmpty) return {};
 
-    // Fetch items for those receipts
-    final itemRows = await _db
-        .from('receipt_items')
-        .select('category_id, total_price')
-        .inFilter('purchase_id', ids);
+    final items = await ReceiptService.fetchItemsForReceipts(
+      ids,
+      select: 'category_id, category, total_price',
+    );
 
+    final categories = await CategoryService.fetchAll();
     final Map<String, double> totals = {};
-    for (final r in itemRows as List) {
-      final catId = r['category_id'] as String? ?? 'uncategorized';
-      final price = (r['total_price'] as num).toDouble();
-      totals[catId] = (totals[catId] ?? 0) + price;
+    for (final r in items) {
+      final key = ReceiptService.categoryKeyForItem(r, categories);
+      final price = (r['total_price'] as num?)?.toDouble() ?? 0;
+      totals[key] = (totals[key] ?? 0) + price;
     }
     return totals;
   }

@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import '../app_state.dart';
 import '../l10n/app_strings.dart';
 import '../services/receipt_service.dart';
+import '../services/family_service.dart';
 import '../models/receipt.dart';
 import '../widgets/add_receipt_sheet.dart';
 import 'receipt_detail_screen.dart';
 
 class ReceiptsScreen extends StatefulWidget {
-  const ReceiptsScreen({super.key});
+  final bool isActive;
+
+  const ReceiptsScreen({super.key, this.isActive = true});
 
   @override
   State<ReceiptsScreen> createState() => _ReceiptsScreenState();
@@ -18,48 +21,134 @@ class _ReceiptsScreenState extends State<ReceiptsScreen>
   late TabController _tabCtrl;
   final _searchCtrl = TextEditingController();
   String _query = '';
-  int _refreshTick = 0;
+  bool _hasFamily = false;
+
+  List<Map<String, dynamic>> _personalRows = [];
+  List<Map<String, dynamic>> _familyRows = [];
+  bool _personalLoading = true;
+  bool _familyLoading = true;
+  bool _familyNoFamily = false;
+  Object? _personalError;
+  Object? _familyError;
 
   @override
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 2, vsync: this);
+    _tabCtrl.addListener(_onTabChanged);
     _searchCtrl.addListener(() => setState(() => _query = _searchCtrl.text.toLowerCase()));
     currentLanguage.addListener(_onLangChange);
+    receiptsRevision.addListener(_onReceiptsChanged);
+    _refreshFamilyStatus();
+    _loadPersonal();
+  }
+
+  @override
+  void didUpdateWidget(ReceiptsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isActive && widget.isActive) {
+      _reloadVisibleTab();
+    }
+  }
+
+  void _onTabChanged() {
+    if (_tabCtrl.indexIsChanging) return;
+    setState(() {});
+    _reloadVisibleTab();
+  }
+
+  void _reloadVisibleTab() {
+    if (_tabCtrl.index == 0) {
+      _loadPersonal();
+    } else {
+      _loadFamily();
+    }
+  }
+
+  Future<void> _refreshFamilyStatus() async {
+    final family = await FamilyService.fetchMyFamily();
+    if (mounted) setState(() => _hasFamily = family != null);
   }
 
   void _onLangChange() => setState(() {});
 
-  void refresh() => setState(() => _refreshTick++);
+  void _onReceiptsChanged() => refresh();
+
+  Future<void> refresh() async {
+    await _refreshFamilyStatus();
+    await Future.wait([_loadPersonal(), _loadFamily()]);
+  }
+
+  Future<void> _loadPersonal() async {
+    if (!mounted) return;
+    setState(() {
+      _personalLoading = true;
+      _personalError = null;
+    });
+    try {
+      final rows = await ReceiptService.fetchAll(familyMode: false);
+      if (mounted) {
+        setState(() {
+          _personalRows = rows;
+          _personalLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _personalError = e;
+          _personalLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadFamily() async {
+    if (!mounted) return;
+    setState(() {
+      _familyLoading = true;
+      _familyError = null;
+    });
+    try {
+      final family = await FamilyService.fetchMyFamily();
+      if (family == null) {
+        if (mounted) {
+          setState(() {
+            _familyRows = [];
+            _familyNoFamily = true;
+            _familyLoading = false;
+          });
+        }
+        return;
+      }
+      final rows = await ReceiptService.fetchAll(familyMode: true);
+      if (mounted) {
+        setState(() {
+          _familyRows = rows;
+          _familyNoFamily = false;
+          _familyLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _familyError = e;
+          _familyLoading = false;
+        });
+      }
+    }
+  }
+
+  bool get _canScanReceipt => _tabCtrl.index == 0 || _hasFamily;
 
   @override
   void dispose() {
+    _tabCtrl.removeListener(_onTabChanged);
     currentLanguage.removeListener(_onLangChange);
+    receiptsRevision.removeListener(_onReceiptsChanged);
     _tabCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
-  }
-
-  String _personalLabel(String lang) {
-    switch (lang) {
-      case 'az':
-        return 'Şəxsi';
-      case 'ru':
-        return 'Личные';
-      default:
-        return 'Personal';
-    }
-  }
-
-  String _familyLabel(String lang) {
-    switch (lang) {
-      case 'az':
-        return 'Ailə';
-      case 'ru':
-        return 'Семья';
-      default:
-        return 'Family';
-    }
   }
 
   @override
@@ -75,6 +164,13 @@ class _ReceiptsScreenState extends State<ReceiptsScreen>
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         foregroundColor: Theme.of(context).colorScheme.onSurface,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh, color: Theme.of(context).colorScheme.onSurface),
+            tooltip: AppStrings.get('refresh', lang),
+            onPressed: refresh,
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(96),
           child: Column(
@@ -86,8 +182,8 @@ class _ReceiptsScreenState extends State<ReceiptsScreen>
                     Theme.of(context).colorScheme.onSurfaceVariant,
                 indicatorColor: const Color(0xFF1B5E20),
                 tabs: [
-                  Tab(text: _personalLabel(lang)),
-                  Tab(text: _familyLabel(lang)),
+                  Tab(text: AppStrings.get('tab_personal', lang)),
+                  Tab(text: AppStrings.get('tab_family', lang)),
                 ],
               ),
               Padding(
@@ -134,47 +230,65 @@ class _ReceiptsScreenState extends State<ReceiptsScreen>
       body: TabBarView(
         controller: _tabCtrl,
         children: [
-          _ReceiptListTab(
-            familyMode: false,
+          _ReceiptListBody(
+            rows: _personalRows,
+            loading: _personalLoading,
+            error: _personalError,
+            noFamily: false,
             query: _query,
-            refreshTick: _refreshTick,
+            familyMode: false,
+            onRetry: _loadPersonal,
             onRefresh: refresh,
           ),
-          _ReceiptListTab(
-            familyMode: true,
+          _ReceiptListBody(
+            rows: _familyRows,
+            loading: _familyLoading,
+            error: _familyError,
+            noFamily: _familyNoFamily,
             query: _query,
-            refreshTick: _refreshTick,
+            familyMode: true,
+            onRetry: _loadFamily,
             onRefresh: refresh,
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => showAddReceiptSheet(context, onDone: refresh),
-        backgroundColor: const Color(0xFF1B5E20),
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: Text(
-          AppStrings.get('add_receipt', lang),
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
-      ),
+      floatingActionButton: _canScanReceipt
+          ? FloatingActionButton.extended(
+              onPressed: () => showAddReceiptSheet(context, onDone: refresh),
+              backgroundColor: const Color(0xFF1B5E20),
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: Text(
+                AppStrings.get('add_receipt', lang),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              ),
+            )
+          : null,
     );
   }
 }
 
-class _ReceiptListTab extends StatelessWidget {
-  final bool familyMode;
+class _ReceiptListBody extends StatelessWidget {
+  final List<Map<String, dynamic>> rows;
+  final bool loading;
+  final Object? error;
+  final bool noFamily;
   final String query;
-  final int refreshTick;
-  final VoidCallback onRefresh;
+  final bool familyMode;
+  final VoidCallback onRetry;
+  final Future<void> Function() onRefresh;
 
-  const _ReceiptListTab({
-    required this.familyMode,
+  const _ReceiptListBody({
+    required this.rows,
+    required this.loading,
+    required this.error,
+    required this.noFamily,
     required this.query,
-    required this.refreshTick,
+    required this.familyMode,
+    required this.onRetry,
     required this.onRefresh,
   });
 
-  List<Map<String, dynamic>> _filtered(List<Map<String, dynamic>> rows) {
+  List<Map<String, dynamic>> _filtered() {
     if (query.isEmpty) return rows;
     return rows
         .where((r) =>
@@ -183,9 +297,9 @@ class _ReceiptListTab extends StatelessWidget {
   }
 
   Map<String, List<Map<String, dynamic>>> _groupByDate(
-      List<Map<String, dynamic>> rows) {
+      List<Map<String, dynamic>> list) {
     final map = <String, List<Map<String, dynamic>>>{};
-    for (final r in rows) {
+    for (final r in list) {
       final key = r['purchase_date'] as String? ?? '—';
       map.putIfAbsent(key, () => []).add(r);
     }
@@ -228,47 +342,59 @@ class _ReceiptListTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      key: ValueKey('$familyMode-$refreshTick'),
-      future: ReceiptService.fetchAll(familyMode: familyMode),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.error_outline,
-                    size: 48, color: Colors.red.shade300),
-                const SizedBox(height: 12),
-                Text(
-                  AppStrings.get('failed_to_load', currentLanguage.value),
-                  style: const TextStyle(color: Color(0xFF8888A0)),
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton(
-                  onPressed: onRefresh,
-                  child: Text(
-                      AppStrings.get('retry', currentLanguage.value)),
-                ),
-              ],
+    if (loading && rows.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (error != null && rows.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, size: 48, color: Colors.red.shade300),
+            const SizedBox(height: 12),
+            Text(
+              AppStrings.get('failed_to_load', currentLanguage.value),
+              style: const TextStyle(color: Color(0xFF8888A0)),
             ),
-          );
-        }
-        final rows = _filtered(snapshot.data ?? []);
-        if (rows.isEmpty) {
-          return _EmptyState(
-            hasSearch: query.isNotEmpty,
-            lang: currentLanguage.value,
-            familyMode: familyMode,
-          );
-        }
-        final grouped = _groupByDate(rows);
-        return RefreshIndicator(
-          onRefresh: () async => onRefresh(),
-          child: ListView.builder(
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: onRetry,
+              child: Text(AppStrings.get('retry', currentLanguage.value)),
+            ),
+          ],
+        ),
+      );
+    }
+    if (noFamily) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            AppStrings.familySetupHint(currentLanguage.value),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 15,
+              height: 1.45,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      );
+    }
+    final filtered = _filtered();
+    if (filtered.isEmpty) {
+      return _EmptyState(
+        hasSearch: query.isNotEmpty,
+        lang: currentLanguage.value,
+        familyMode: familyMode,
+      );
+    }
+    final grouped = _groupByDate(filtered);
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: Stack(
+        children: [
+          ListView.builder(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
             itemCount: grouped.length,
             itemBuilder: (context, sectionIndex) {
@@ -290,14 +416,24 @@ class _ReceiptListTab extends StatelessWidget {
                     ),
                   ),
                   ...sectionRows.map(
-                    (r) => _ReceiptCard(row: r, onDeleted: onRefresh),
+                    (r) => _ReceiptCard(
+                      row: r,
+                      onDeleted: () => onRefresh(),
+                    ),
                   ),
                 ],
               );
             },
           ),
-        );
-      },
+          if (loading)
+            const Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -451,10 +587,10 @@ class _ReceiptCard extends StatelessWidget {
                               color: Color(0xFF1B5E20),
                             ),
                             const SizedBox(width: 4),
-                            Expanded(
+                            const Expanded(
                               child: Text(
                                 'e-kassa',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
                                   color: Color(0xFF1B5E20),
                                 ),

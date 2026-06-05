@@ -1,0 +1,62 @@
+Object name: MaHaLLa MARKET
+Object address: AZ1052 BAKI ŞAHARİ
+NaRiMANOV RAYONU YUSİF VAZiR
+ÇAMANZaMiNLi ev.123 A m.-
+Object code: 1503168422-15001
+Taxpayer name: IBRAHIMZAD2 EMIN 2LI
+TIN: 1503168422
+Sale receipt Nº 266562
+Cashier:
+Kassir Date:
+25.05.2026
+Time:
+19:03:45
+Product
+Quantity Price Total
+ASSORTI TORT M.R
+0.150 15.00 2.25
+(kg)
+*VAT-exempt
+0.280 10.00 2.80
+(kg)
+ASSORTI QOZLU M.R
+*VAT: 18%
+0.270 14.00 3.78
+ASSORTI CHEESCAKE M.R (kg)
+*VAT-exempt
+1
+0.04 0.04
+(pc)
+MEHELLE PAKET
+*VAT: 18%
+8.87
+Total
+2.84
+*VAT 18% = 0.43
+6.03
+*VAT-exempt
+*Total tax = 0.43
+Payment type
+0.00
+Cashless:
+8.87
+Cash:
+100.00
+* Paid cash:
+91.13
+*Change:
+Bonus:
+0.00
+0.00
+Prepayment:
+0.00
+Credit:
+Receipt order in shift: 470
+Cash register model: TPS575 Smart POS
+Cash register factory number: 2001G57500300989
+Fiscal ID: 2vL7E5bXRJ3Y
+Cashbox registration number: 0000011143
+www.e-kassa.gov.az
+VAT refund
+*ХЖЖ*хх*х*ххх**хх***ххх**ххх**х*х*************
+No VAT refund on the receipt.

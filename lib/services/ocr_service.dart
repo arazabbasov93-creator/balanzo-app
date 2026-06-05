@@ -1,34 +1,69 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'crash_service.dart';
+import '../utils/receipt_numbers.dart';
 
 class OcrService {
+  static const _visionChannel = MethodChannel('com.mycompany.balanzo/vision_ocr');
   static final _recognizer = TextRecognizer(script: TextRecognitionScript.latin);
 
   static Future<String> recognizeText(String imagePath) async {
     try {
-      final inputImage = InputImage.fromFilePath(imagePath);
-      final result = await _recognizer.processImage(inputImage);
-
-      // ML Kit's result.text uses internal block ordering which is column-order
-      // on multi-column receipts — wrong for parsing. Instead, extract all lines
-      // with their Y coordinates and sort top-to-bottom for true reading order.
-      final allLines = <_OcrLine>[];
-      for (final block in result.blocks) {
-        for (final line in block.lines) {
-          final top = line.boundingBox.top;
-          final text = line.elements.map((e) => e.text).join(' ');
-          allLines.add(_OcrLine(top: top, text: text));
+      if (Platform.isIOS) {
+        final visionText = await _recognizeWithAppleVision(imagePath);
+        if (visionText != null && visionText.trim().isNotEmpty) {
+          return visionText;
         }
       }
-
-      // Sort by Y position (top to bottom)
-      allLines.sort((a, b) => a.top.compareTo(b.top));
-
-      return allLines.map((l) => l.text).join('\n');
+      return await _recognizeWithMlKit(imagePath);
     } catch (e, stack) {
       await CrashService.log(e, stack, context: 'ocr_extraction');
       rethrow;
     }
+  }
+
+  /// Apple Vision on iOS — same engine as macOS dev fixtures; better on e-kassa JPEGs.
+  static Future<String?> _recognizeWithAppleVision(String imagePath) async {
+    try {
+      final text = await _visionChannel.invokeMethod<String>('recognizeText', {
+        'path': imagePath,
+      });
+      return text;
+    } catch (e) {
+      debugPrint('[OCR] Apple Vision failed, falling back to ML Kit: $e');
+      return null;
+    }
+  }
+
+  static Future<String> _recognizeWithMlKit(String imagePath) async {
+    final inputImage = InputImage.fromFilePath(imagePath);
+    final result = await _recognizer.processImage(inputImage);
+
+    // ML Kit (Android + iOS fallback): sort lines top-to-bottom, left-to-right within row.
+    final allLines = <_OcrLine>[];
+    for (final block in result.blocks) {
+      for (final line in block.lines) {
+        final text = line.text.trim().isNotEmpty
+            ? line.text.trim()
+            : line.elements.map((e) => e.text).join(' ').trim();
+        if (text.isEmpty) continue;
+        allLines.add(_OcrLine(
+          top: line.boundingBox.top,
+          left: line.boundingBox.left,
+          text: text,
+        ));
+      }
+    }
+
+    allLines.sort((a, b) {
+      final dy = a.top.compareTo(b.top);
+      if (dy != 0) return dy;
+      return a.left.compareTo(b.left);
+    });
+    return allLines.map((l) => l.text).join('\n');
   }
 
   static Future<String> recognizeMultiple(List<String> imagePaths) async {
@@ -265,17 +300,34 @@ class OcrService {
 
     final labeledTotal = _extractLabeledTotal(lines);
     final vatCount = _countVatMarkers(lines);
-    final candidates = <List<({String name, double qty, double unit, double total})>>[];
 
-    candidates.add(_extractVatMarkerColumnStack(lines, tableIdx, normNum));
-    candidates.add(_extractLooseEkassaItems(lines, normNum));
-    candidates.add(_extractStackedLinePrices(lines, normNum));
-    candidates.add(_extractInlineEkassaItemsAnywhere(lines, normNum));
+    // Price-anchored: one item per price row, name scanned backward (robust on iPhone OCR).
+    final priceAnchored = _extractPriceAnchoredItems(lines, tableIdx, normNum);
+
+    final rowOrder = _extractVatBlockRowOrder(lines, tableIdx, normNum);
+    final rowItems = _recoverOrphanEkassaItems(
+      rowOrder,
+      lines,
+      tableIdx,
+      normNum,
+      labeledTotal,
+    );
+
+    final candidates = <List<({String name, double qty, double unit, double total})>>[
+      priceAnchored,
+      rowItems,
+      _extractVatMarkerColumnStack(lines, tableIdx, normNum),
+      _extractLooseEkassaItems(lines, normNum),
+      _extractStackedLinePrices(lines, normNum),
+      _extractInlineEkassaItemsAnywhere(lines, normNum),
+    ];
 
     if (tableIdx >= 0) {
-      candidates.add(_extractAzeriColumnStack(lines, tableIdx, normNum));
-      candidates.add(_extractSplitColumnEkassaItems(lines, tableIdx, normNum));
-      candidates.add(_extractInlineEkassaItems(lines, tableIdx, normNum));
+      candidates.addAll([
+        _extractAzeriColumnStack(lines, tableIdx, normNum),
+        _extractSplitColumnEkassaItems(lines, tableIdx, normNum),
+        _extractInlineEkassaItems(lines, tableIdx, normNum),
+      ]);
     }
 
     final best = _pickBestEkassaItems(candidates, labeledTotal, vatCount);
@@ -334,6 +386,7 @@ class OcrService {
   static int _countVatMarkers(List<String> lines) {
     var count = 0;
     for (final l in lines) {
+      if (_isEkassaFooterLine(l.trim())) break;
       if (_isEkassaVatLine(l)) count++;
     }
     return count;
@@ -478,26 +531,9 @@ class OcrService {
     int tableIdx,
     String Function(String) normNum,
   ) {
-    final triple = RegExp(
-      r'^(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$',
-    );
-    final prices = <({double qty, double unit, double total})>[];
-
-    for (int i = tableIdx + 1; i < lines.length; i++) {
-      final l = normNum(lines[i]);
-      if (_isEkassaFooterLine(l)) break;
-
-      final m = triple.firstMatch(l);
-      if (m == null) continue;
-
-      final row = (
-        qty: double.parse(m.group(1)!),
-        unit: double.parse(m.group(2)!),
-        total: double.parse(m.group(3)!),
-      );
-      if (_isValidEkassaPriceRow(row)) prices.add(row);
-    }
-    return prices;
+    return _collectProductPriceRows(lines, tableIdx, normNum)
+        .map((r) => (qty: r.qty, unit: r.unit, total: r.total))
+        .toList();
   }
 
   static List<({String name, double qty, double unit, double total})> _zipEkassaNamesAndPrices(
@@ -559,9 +595,18 @@ class OcrService {
     return score;
   }
 
-  /// Strips barcodes, times, dates, and OCR junk from product names.
+  /// Strips barcodes, times, dates, VAT markers, and OCR junk from product names.
   static String _cleanEkassaProductName(String raw) {
     var name = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
+    name = name.replaceAll(
+      RegExp(r'^\*?\s*VAT[:\s-]*(?:18%|exempt[^\s,]*)\s*', caseSensitive: false),
+      '',
+    );
+    name = name.replaceAll(
+      RegExp(r'\s*\*?\s*VAT[:\s-]*(?:18%|exempt[^\s,]*)\s*', caseSensitive: false),
+      ' ',
+    );
+    name = name.replaceAll(RegExp(r'^18%\s*'), '');
     name = name.replaceAll(RegExp(r'^\d{2}:\d{2}:\d{2}\s*'), '');
     name = name.replaceAll(RegExp(r'\bDate:\s*\d{2}:\d{2}:\d{2}\b', caseSensitive: false), '');
     name = name.replaceAll(RegExp(r'^\d{6}\s+Date:', caseSensitive: false), '');
@@ -571,6 +616,70 @@ class OcrService {
     name = name.replaceAll(RegExp(r'\s+\(\s*\)\s*$'), '');
     name = name.replaceAll(RegExp(r'\(\s*(kg|pc|eded)\s*\)\s*$', caseSensitive: false), '');
     return name.trim();
+  }
+
+  static bool _isVatOrUnitNoiseLine(String l) {
+    final t = l.trim();
+    if (RegExp(r'^\*?\s*(?:VAT|ƏDV)', caseSensitive: false).hasMatch(t)) return true;
+    if (RegExp(r'^\d{1,2}\s*%\s*$').hasMatch(t)) return true;
+    if (RegExp(r'^18%\s*$').hasMatch(t)) return true;
+    if (RegExp(r'^\(\s*(kg|pc|eded)\s*\)$', caseSensitive: false).hasMatch(t)) {
+      return true;
+    }
+    return false;
+  }
+
+  static bool _hasVatNoiseName(String name) {
+    return RegExp(r'(?:^|\s)(?:VAT|ƏDV|18%)', caseSensitive: false).hasMatch(name.trim());
+  }
+
+  /// Primary e-kassa strategy: match each price row to the nearest name above it.
+  static List<({String name, double qty, double unit, double total})>
+      _extractPriceAnchoredItems(
+    List<String> lines,
+    int tableIdx,
+    String Function(String) normNum,
+  ) {
+    final allPrices = _collectProductPriceRows(lines, tableIdx, normNum);
+    if (allPrices.isEmpty) return [];
+
+    final minLine = tableIdx >= 0 ? tableIdx + 1 : 0;
+    final items = <({String name, double qty, double unit, double total})>[];
+
+    for (final pr in allPrices) {
+      var name = _findNameNearPriceLine(lines, pr.lineIdx, minLine);
+      name = _cleanEkassaProductName(name);
+      if (name.isEmpty || _isLikelyAddressOrMetadata(name)) continue;
+      if (_hasVatNoiseName(name)) {
+        name = _cleanEkassaProductName(
+          name.replaceAll(
+            RegExp(r'(?:^|\s)(?:VAT|ƏDV|18%)[^\w]*', caseSensitive: false),
+            ' ',
+          ),
+        );
+      }
+      if (name.isEmpty) continue;
+
+      final item = (
+        name: name,
+        qty: pr.qty,
+        unit: pr.unit,
+        total: pr.total,
+      );
+      if (!_isValidEkassaItem(item)) continue;
+
+      final dup = items.any(
+        (i) =>
+            (i.total - item.total).abs() < 0.02 &&
+            (i.unit - item.unit).abs() < 0.02 &&
+            (i.qty - item.qty).abs() < 0.02 &&
+            i.name.toLowerCase() == item.name.toLowerCase(),
+      );
+      if (dup) continue;
+
+      items.add(item);
+    }
+    return items;
   }
 
   static List<({String name, double qty, double unit, double total})> _pickBestEkassaItems(
@@ -586,20 +695,34 @@ class OcrService {
       if (valid.isEmpty) continue;
 
       final sum = valid.fold(0.0, (s, i) => s + i.total);
-      var score = valid.length * 15.0;
+      var score = valid.length * 20.0;
+      if (vatMarkerCount > 0) {
+        score -= (valid.length - vatMarkerCount).abs() * 15;
+        if (valid.length == vatMarkerCount) score += 40;
+        if (valid.length >= vatMarkerCount && valid.length <= vatMarkerCount + 2) {
+          score += 20;
+        }
+      }
       if (labeledTotal != null && labeledTotal > 0) {
         score -= (sum - labeledTotal).abs() * 50;
-        if ((sum - labeledTotal).abs() <= 0.05) score += 30;
-      }
-      if (vatMarkerCount > 0) {
-        score -= (valid.length - vatMarkerCount).abs() * 25;
-        if (valid.length == vatMarkerCount) score += 40;
+        if ((sum - labeledTotal).abs() <= 0.05) score += 80;
+        if ((sum - labeledTotal).abs() <= 0.15) score += 40;
+        // Reject clearly incomplete or inflated item sets when grand total is known.
+        if (sum < labeledTotal * 0.75) score -= 400;
+        if (sum > labeledTotal * 1.15) score -= 400;
+        if (valid.length == 1 && labeledTotal > sum + 5) score -= 400;
+        if (valid.length == 1 && sum > labeledTotal + 5) score -= 400;
       }
       for (final item in valid) {
         if (_isLikelyAddressOrMetadata(item.name)) score -= 100;
+        if (_hasVatNoiseName(item.name)) score -= 150;
         if (item.name.length > 60) score -= 30;
-        if (RegExp(r'^Məhsul \d+$').hasMatch(item.name)) score -= 5;
+        if (RegExp(r'^Məhsul \d+$').hasMatch(item.name)) score -= 25;
+        if (_isOcrNameFragment(item.name)) score -= 60;
       }
+      final names = valid.map((i) => i.name.trim().toLowerCase()).toList();
+      if (names.length != names.toSet().length) score -= 100;
+      if (names.length == names.toSet().length && valid.length >= 2) score += 30;
 
       if (score > bestScore) {
         bestScore = score;
@@ -611,9 +734,693 @@ class OcrService {
 
   static bool _isLikelyAddressOrMetadata(String text) {
     return RegExp(
-      r'KÜÇƏ|KUCƏ|RAYON|BAKI|AZ1052|AZ1033|NƏRİMANOV|NERIMANOV|TƏBRİZ|TEBRIZ|ÜNVAN|UNVAN|VÖEN|TIN:|1502989081|1503168422|1500072561|KƏSİŞMƏ|KESISME|ÇƏMƏNZƏMİNLİ|CƏMİYYƏTİ|CƏMİYYƏTI|SƏHMDAR|SEHMDAR|ev\.\d',
+      r'KÜÇƏ|KUCƏ|RAYON|BAKI|AZ1052|AZ1033|NƏRİMANOV|NERIMANOV|TƏBRİZ|TEBRIZ|ÜNVAN|UNVAN|VÖEN|TIN:|1502989081|1503168422|1500072561|KƏSİŞMƏ|KESISME|ÇƏMƏNZƏMİNLİ|CƏMİYYƏTİ|CƏMİYYƏTI|SƏHMDAR|SEHMDAR|SAHMDAR|IBRAHIMZAD|EMIN\s+\d|YUSİF|VAZiR|ev\.\d|^\d+LI$|^OĞLU$|^OGLU$|m\.\-$',
       caseSensitive: false,
     ).hasMatch(text);
+  }
+
+  /// Row-order e-kassa: each product block ends with a *VAT/*ƏDV line.
+  static List<({String name, double qty, double unit, double total})> _extractVatBlockRowOrder(
+    List<String> lines,
+    int tableIdx,
+    String Function(String) normNum,
+  ) {
+    var start = tableIdx >= 0 ? tableIdx + 1 : 0;
+    while (start < lines.length && _isTableHeaderFragment(lines[start])) {
+      start++;
+    }
+
+    final items = <({String name, double qty, double unit, double total})>[];
+    var blockStart = start;
+
+    for (int i = start; i < lines.length; i++) {
+      if (!_isEkassaVatLine(lines[i])) continue;
+      if (i > blockStart) {
+        items.addAll(
+          _parseEkassaProductBlocks(
+            lines.sublist(blockStart, i),
+            normNum,
+          ),
+        );
+      }
+      blockStart = i + 1;
+    }
+    return items;
+  }
+
+  /// One VAT block may contain several products when OCR drops *VAT lines.
+  static List<({String name, double qty, double unit, double total})>
+      _parseEkassaProductBlocks(
+    List<String> block,
+    String Function(String) normNum,
+  ) {
+    if (block.isEmpty) return [];
+
+    final subBlocks = <List<String>>[];
+    var current = <String>[];
+    for (final raw in block) {
+      final l = raw.trim();
+      if (_isEkassaVatLine(l)) {
+        if (current.isNotEmpty) subBlocks.add(current);
+        current = [];
+        continue;
+      }
+      final embedded = _splitLineOnEmbeddedVat(l);
+      if (embedded.length > 1) {
+        for (var i = 0; i < embedded.length; i++) {
+          final part = embedded[i].trim();
+          if (part.isEmpty) continue;
+          if (i > 0 && current.isNotEmpty) {
+            subBlocks.add(current);
+            current = [];
+          }
+          current.add(part);
+        }
+      } else {
+        current.add(raw);
+      }
+    }
+    if (current.isNotEmpty) subBlocks.add(current);
+
+    final items = <({String name, double qty, double unit, double total})>[];
+    for (final sb in subBlocks.isEmpty ? [block] : subBlocks) {
+      items.addAll(_parseEkassaProductBlockSequential(sb, normNum));
+    }
+    return items;
+  }
+
+  static List<String> _splitLineOnEmbeddedVat(String line) {
+    return line
+        .split(RegExp(
+          r'\*?\s*VAT[:\s-]*(?:18%|exempt\b[^\s]*)',
+          caseSensitive: false,
+        ))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
+
+  /// Emits one item per price row; names accumulate until each price line.
+  static List<({String name, double qty, double unit, double total})>
+      _parseEkassaProductBlockSequential(
+    List<String> block,
+    String Function(String) normNum,
+  ) {
+    final tripleRe = RegExp(
+      r'^(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$',
+    );
+    final pairRe = RegExp(r'^(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$');
+    final inlinePriceEnd = RegExp(
+      r'(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$',
+    );
+    final singleQtyRe = RegExp(r'^(\d+(?:\.\d+)?)$');
+    final singleMoneyRe = RegExp(r'^(\d+(?:\.\d+)?)$');
+
+    final items = <({String name, double qty, double unit, double total})>[];
+    var nameParts = <String>[];
+    double? pendingQty;
+    ({double qty, double unit, double total})? pendingPrice;
+
+    void emit({
+      required double qty,
+      required double unit,
+      required double total,
+    }) {
+      var name = _cleanEkassaProductName(nameParts.join(' '));
+      final splitNames = _splitEmbeddedProductNames(name);
+      if (splitNames.length > 1) {
+        name = splitNames.last;
+      }
+      if (name.isEmpty) {
+        pendingPrice = (qty: qty, unit: unit, total: total);
+        nameParts = [];
+        pendingQty = null;
+        return;
+      }
+      final item = (name: name, qty: qty, unit: unit, total: total);
+      if (_isValidEkassaItem(item)) items.add(item);
+      nameParts = [];
+      pendingQty = null;
+      pendingPrice = null;
+    }
+
+    void flushPendingPriceWithName() {
+      if (pendingPrice == null) return;
+      var name = _cleanEkassaProductName(nameParts.join(' '));
+      if (name.isEmpty) return;
+      final p = pendingPrice!;
+      final item = (name: name, qty: p.qty, unit: p.unit, total: p.total);
+      if (_isValidEkassaItem(item)) items.add(item);
+      nameParts = [];
+      pendingPrice = null;
+      pendingQty = null;
+    }
+
+    bool tryEmitStacked(int i) {
+      if (i + 2 >= block.length) return false;
+      final a = normNum(block[i].trim());
+      final b = normNum(block[i + 1].trim());
+      final c = normNum(block[i + 2].trim());
+      final qm = singleQtyRe.firstMatch(a);
+      final um = singleMoneyRe.firstMatch(b);
+      final tm = singleMoneyRe.firstMatch(c);
+      if (qm == null || um == null || tm == null) return false;
+      final row = (
+        qty: double.parse(qm.group(1)!),
+        unit: double.parse(um.group(1)!),
+        total: double.parse(tm.group(1)!),
+      );
+      if (!_isValidEkassaPriceRow(row)) return false;
+      emit(qty: row.qty, unit: row.unit, total: row.total);
+      return true;
+    }
+
+    /// SUNMI OCR: unit price, qty, product name, repeat of unit as line total.
+    /// Returns index of last consumed line, or null if pattern not matched.
+    int? tryEmitUnitQtyNameTotal(int i) {
+      final unitStr = normNum(block[i].trim());
+      final um = singleMoneyRe.firstMatch(unitStr);
+      if (um == null) return null;
+      if (i + 1 >= block.length) return null;
+      final qtyStr = normNum(block[i + 1].trim());
+      final qm = singleQtyRe.firstMatch(qtyStr);
+      if (qm == null) return null;
+      final qty = double.parse(qm.group(1)!);
+      if (qty != qty.roundToDouble() || qty < 1 || qty > 99) return null;
+      final unit = double.parse(um.group(1)!);
+      final name = _findNextProductNameInBlock(block, i + 2, normNum);
+      if (name == null) return null;
+      for (var j = i + 2; j < block.length && j <= i + 6; j++) {
+        final t = normNum(block[j].trim());
+        if (singleMoneyRe.hasMatch(t) && (double.parse(t) - unit).abs() <= 0.02) {
+          nameParts = [name];
+          emit(qty: qty, unit: unit, total: double.parse(t));
+          return j;
+        }
+      }
+      return null;
+    }
+
+    for (var i = 0; i < block.length; i++) {
+      if (tryEmitStacked(i)) {
+        i += 2;
+        continue;
+      }
+      final unitQtyEnd = tryEmitUnitQtyNameTotal(i);
+      if (unitQtyEnd != null) {
+        i = unitQtyEnd;
+        continue;
+      }
+
+      if (i + 1 < block.length) {
+        final a = normNum(block[i].trim());
+        final b = normNum(block[i + 1].trim());
+        final ma = singleMoneyRe.firstMatch(a);
+        final mb = singleMoneyRe.firstMatch(b);
+        if (ma != null && mb != null) {
+          final qty = double.parse(a);
+          final total = double.parse(b);
+          if (qty < 10 &&
+              qty > 0 &&
+              total > qty &&
+              _findNextProductNameInBlock(block, i + 2, normNum) != null) {
+            final impliedUnit = total / qty;
+            if (impliedUnit >= 1 &&
+                impliedUnit <= 500 &&
+                (qty * impliedUnit - total).abs() <= 0.12) {
+              emit(qty: qty, unit: impliedUnit, total: total);
+              i += 1;
+              continue;
+            }
+          }
+        }
+      }
+
+      final raw = block[i];
+      final l = normNum(raw.trim());
+      if (l.isEmpty) continue;
+      if (_isEkassaVatLine(l)) continue;
+      if (RegExp(r'^\(\s*(kg|pc|eded)\s*\)$', caseSensitive: false).hasMatch(l)) {
+        continue;
+      }
+      if (_isNameSkipLine(l)) continue;
+
+      final m3 = tripleRe.firstMatch(l);
+      if (m3 != null) {
+        final inlineName = _cleanEkassaProductName(l.substring(0, m3.start).trim());
+        if (inlineName.isNotEmpty) nameParts.add(inlineName);
+        emit(
+          qty: double.parse(m3.group(1)!),
+          unit: double.parse(m3.group(2)!),
+          total: double.parse(m3.group(3)!),
+        );
+        continue;
+      }
+
+      final m2 = pairRe.firstMatch(l);
+      if (m2 != null) {
+        var qty = pendingQty ?? 1.0;
+        final unit = double.parse(m2.group(1)!);
+        final total = double.parse(m2.group(2)!);
+        // OCR: qty and total on two lines before product name (e.g. 0.85 / 3.40 / SAVUSKI).
+        if (pendingQty == null &&
+            unit < total &&
+            unit > 0 &&
+            unit < 10 &&
+            _findNextProductNameInBlock(block, i + 1, normNum) != null) {
+          final impliedUnit = total / unit;
+          if (impliedUnit >= 1 &&
+              impliedUnit <= 500 &&
+              (unit * impliedUnit - total).abs() <= 0.12) {
+            emit(qty: unit, unit: impliedUnit, total: total);
+            continue;
+          }
+        }
+        if (pendingQty == null &&
+            i + 1 < block.length &&
+            singleQtyRe.hasMatch(normNum(block[i + 1].trim()))) {
+          final nextQty = double.parse(
+            singleQtyRe.firstMatch(normNum(block[i + 1].trim()))!.group(1)!,
+          );
+          final qtyMatches = (nextQty * unit - total).abs() <= 0.2;
+          if (qtyMatches && unit > total + 0.5) {
+            final currentName = _cleanEkassaProductName(nameParts.join(' '));
+            final nameAfterQty = _findNextProductNameInBlock(block, i + 2, normNum);
+            final shouldDefer = nameAfterQty != null &&
+                (currentName.isEmpty ||
+                    nameAfterQty.length > currentName.length + 2);
+            if (shouldDefer) {
+              nameParts = [];
+              pendingPrice = (qty: nextQty, unit: unit, total: total);
+              pendingQty = null;
+              i++;
+              continue;
+            }
+            qty = nextQty;
+            i++;
+          } else if ((unit - total).abs() <= 0.05) {
+            qty = nextQty;
+            i++;
+          }
+        }
+        emit(qty: qty, unit: unit, total: total);
+        continue;
+      }
+
+      if (singleQtyRe.hasMatch(l)) {
+        pendingQty = double.parse(l);
+        continue;
+      }
+
+      final inline = inlinePriceEnd.firstMatch(l);
+      if (inline != null && inline.start > 0) {
+        nameParts.add(_cleanEkassaProductName(l.substring(0, inline.start)));
+        emit(
+          qty: double.parse(inline.group(1)!),
+          unit: double.parse(inline.group(2)!),
+          total: double.parse(inline.group(3)!),
+        );
+        continue;
+      }
+
+      if (RegExp(r'^[\d\s.,]+$').hasMatch(l)) continue;
+      if (_isLikelyAddressOrMetadata(l)) continue;
+
+      for (final part in _splitLineOnEmbeddedVat(l)) {
+        if (part.isNotEmpty) nameParts.add(part);
+      }
+      if (pendingPrice != null) {
+        flushPendingPriceWithName();
+      }
+    }
+
+    flushPendingPriceWithName();
+
+    return items;
+  }
+
+  static String? _findNextProductNameInBlock(
+    List<String> block,
+    int startIdx,
+    String Function(String) normNum,
+  ) {
+    final pairRe = RegExp(r'^(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$');
+    for (var j = startIdx; j < block.length && j <= startIdx + 5; j++) {
+      final l = normNum(block[j].trim());
+      if (l.isEmpty) continue;
+      if (_isEkassaVatLine(l)) break;
+      if (pairRe.hasMatch(l)) break;
+      if (RegExp(r'^(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$')
+          .hasMatch(l)) {
+        break;
+      }
+      if (RegExp(r'^(\d+(?:\.\d+)?)$').hasMatch(l)) continue;
+      if (RegExp(r'^\(\s*(kg|pc|eded)\s*\)$', caseSensitive: false).hasMatch(l)) {
+        continue;
+      }
+      if (_isNameSkipLine(l) || _isBarcodeOrSkuLine(l)) continue;
+      if (RegExp(r'^[\d\s.,]+$').hasMatch(l)) continue;
+      final name = _cleanEkassaProductName(l);
+      if (name.length >= 4 && !_isOcrNameFragment(name)) return name;
+    }
+    return null;
+  }
+
+  static List<String> _splitEmbeddedProductNames(String raw) {
+    return raw
+        .split(RegExp(
+          r'\*?\s*VAT[:\s-]*(?:18%|exempt\b[^\s,]*)',
+          caseSensitive: false,
+        ))
+        .map(_cleanEkassaProductName)
+        .where((n) => n.length >= 2)
+        .toList();
+  }
+
+  static List<({String name, double qty, double unit, double total, int lineIdx})>
+      _collectProductPriceRows(
+    List<String> lines,
+    int tableIdx,
+    String Function(String) normNum,
+  ) {
+    final triple = RegExp(
+      r'^(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$',
+    );
+    final pair = RegExp(r'^(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$');
+    final qtyRe = RegExp(r'^(\d+(?:\.\d+)?)$');
+    final moneyRe = RegExp(r'^(\d+(?:\.\d+)?)$');
+    final rows = <({String name, double qty, double unit, double total, int lineIdx})>[];
+
+    final start = tableIdx >= 0 ? tableIdx + 1 : 0;
+    for (int i = start; i < lines.length; i++) {
+      final l = normNum(lines[i]);
+      if (_isEkassaFooterLine(l)) {
+        if (rows.isNotEmpty) break;
+        continue;
+      }
+
+      final m3 = triple.firstMatch(l);
+      if (m3 != null) {
+        final row = (
+          qty: double.parse(m3.group(1)!),
+          unit: double.parse(m3.group(2)!),
+          total: double.parse(m3.group(3)!),
+        );
+        if (_isValidEkassaPriceRow(row)) {
+          rows.add((
+            name: '',
+            qty: row.qty,
+            unit: row.unit,
+            total: row.total,
+            lineIdx: i,
+          ));
+        }
+        continue;
+      }
+
+      final m2 = pair.firstMatch(l);
+      if (m2 != null) {
+        final unit = double.parse(m2.group(1)!);
+        final total = double.parse(m2.group(2)!);
+
+        // OCR: qty on line after unit/total pair (e.g. 14.0 10.0 / 0.715).
+        if (i + 1 < lines.length) {
+          final next = normNum(lines[i + 1]);
+          final qmNext = qtyRe.firstMatch(next);
+          if (qmNext != null) {
+            final qty = double.parse(qmNext.group(1)!);
+            final row = (qty: qty, unit: unit, total: total);
+            if (_isValidEkassaPriceRow(row) && unit > total + 0.5) {
+              rows.add((
+                name: '',
+                qty: row.qty,
+                unit: row.unit,
+                total: row.total,
+                lineIdx: i + 1,
+              ));
+              i++;
+              continue;
+            }
+          }
+        }
+
+        // Skip pair duplicate of stacked qty/unit/total ending on this line.
+        if (rows.isNotEmpty &&
+            (rows.last.total - total).abs() < 0.02 &&
+            i - rows.last.lineIdx <= 3) {
+          continue;
+        }
+
+        var qty = 1.0;
+        if (i > 0 && qtyRe.hasMatch(normNum(lines[i - 1]))) {
+          qty = double.parse(qtyRe.firstMatch(normNum(lines[i - 1]))!.group(1)!);
+        }
+        final row = (qty: qty, unit: unit, total: total);
+        if (_isValidEkassaPriceRow(row)) {
+          rows.add((
+            name: '',
+            qty: row.qty,
+            unit: row.unit,
+            total: row.total,
+            lineIdx: i,
+          ));
+        }
+        continue;
+      }
+
+      // Unit and total on consecutive lines (Poşet 0.10 / 0.10 / 1 / name).
+      if (moneyRe.hasMatch(l) && i + 1 < lines.length) {
+        final b = normNum(lines[i + 1]);
+        if (moneyRe.hasMatch(b)) {
+          var qty = 1.0;
+          var lineIdx = i + 1;
+          if (i + 2 < lines.length && qtyRe.hasMatch(normNum(lines[i + 2]))) {
+            qty = double.parse(qtyRe.firstMatch(normNum(lines[i + 2]))!.group(1)!);
+            lineIdx = i + 2;
+          }
+          final row = (
+            qty: qty,
+            unit: double.parse(moneyRe.firstMatch(l)!.group(1)!),
+            total: double.parse(moneyRe.firstMatch(b)!.group(1)!),
+          );
+          if (_isValidEkassaPriceRow(row)) {
+            rows.add((
+              name: '',
+              qty: row.qty,
+              unit: row.unit,
+              total: row.total,
+              lineIdx: lineIdx,
+            ));
+            i = lineIdx;
+            continue;
+          }
+        }
+      }
+
+      if (i + 2 < lines.length) {
+        final a = normNum(lines[i]);
+        final b = normNum(lines[i + 1]);
+        final c = normNum(lines[i + 2]);
+        final qm = qtyRe.firstMatch(a);
+        final um = moneyRe.firstMatch(b);
+        final tm = moneyRe.firstMatch(c);
+        if (qm != null && um != null && tm != null) {
+          final row = (
+            qty: double.parse(qm.group(1)!),
+            unit: double.parse(um.group(1)!),
+            total: double.parse(tm.group(1)!),
+          );
+          if (_isValidEkassaPriceRow(row)) {
+            rows.add((
+              name: '',
+              qty: row.qty,
+              unit: row.unit,
+              total: row.total,
+              lineIdx: i,
+            ));
+            i += 2;
+          }
+        }
+      }
+    }
+    return rows;
+  }
+
+  static bool _priceRowUsed(
+    ({double qty, double unit, double total}) row,
+    List<({String name, double qty, double unit, double total})> items,
+  ) {
+    for (final item in items) {
+      if ((item.total - row.total).abs() > 0.02) continue;
+      if ((item.qty - row.qty).abs() > 0.02) continue;
+      if ((item.unit - row.unit).abs() > 0.02) continue;
+      return true;
+    }
+    return false;
+  }
+
+  static bool _isOcrNameFragment(String l) {
+    final t = l.trim();
+    if (t.length < 4 && RegExp(r'[)=|]').hasMatch(t)) return true;
+    if (RegExp(r'^[a-z]{1,4}[=)]', caseSensitive: false).hasMatch(t)) return true;
+    return false;
+  }
+
+  static bool _isBarcodeOrSkuLine(String l) {
+    final t = l.trim();
+    if (RegExp(r'^\(\s*\d{8,}\s*\)$').hasMatch(t)) return true;
+    if (RegExp(r'^\d{10,}$').hasMatch(t.replaceAll(' ', ''))) return true;
+    return false;
+  }
+
+  static String _findNameBeforePriceLine(
+    List<String> lines,
+    int priceLineIdx,
+    int minLine,
+  ) {
+    final buf = <String>[];
+    for (int i = priceLineIdx - 1; i >= minLine; i--) {
+      final l = lines[i].trim();
+      if (l.isEmpty) continue;
+      if (_isEkassaFooterLine(l)) break;
+      if (_isVatOrUnitNoiseLine(l)) continue;
+      if (_isNameSkipLine(l)) continue;
+      if (_isLikelyAddressOrMetadata(l)) break;
+      if (_isBarcodeOrSkuLine(l)) continue;
+      if (_isOcrNameFragment(l)) continue;
+      if (_isEkassaFooterLabelName(l)) continue;
+      if (RegExp(r'^(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$').hasMatch(l)) break;
+      if (RegExp(r'^(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$')
+          .hasMatch(l)) {
+        break;
+      }
+      if (RegExp(r'^\d+$').hasMatch(l)) continue;
+      if (RegExp(r'^[\d\s.,]+$').hasMatch(l)) continue;
+      buf.insert(0, l);
+      if (buf.length >= 4) break;
+    }
+    return _cleanEkassaProductName(buf.join(' '));
+  }
+
+  static String _findNameAfterPriceLine(
+    List<String> lines,
+    int priceLineIdx,
+  ) {
+    for (int i = priceLineIdx + 1; i < lines.length && i <= priceLineIdx + 5; i++) {
+      final l = lines[i].trim();
+      if (l.isEmpty) continue;
+      if (_isEkassaFooterLine(l)) break;
+      if (_isEkassaVatLine(l) || _isVatOrUnitNoiseLine(l)) continue;
+      if (_isNameSkipLine(l)) continue;
+      if (_isBarcodeOrSkuLine(l)) continue;
+      if (_isOcrNameFragment(l)) continue;
+      if (RegExp(r'^\d+$').hasMatch(l)) continue;
+      if (RegExp(r'^(\d+(?:\.\d+)?)$').hasMatch(l)) continue;
+      if (RegExp(r'^(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$').hasMatch(l)) continue;
+      if (RegExp(r'^(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$')
+          .hasMatch(l)) {
+        continue;
+      }
+      if (_isLikelyAddressOrMetadata(l)) continue;
+      final name = _cleanEkassaProductName(l);
+      if (name.length >= 2) return name;
+    }
+    return '';
+  }
+
+  /// Match product name to price row — handles both name-before-price and price-before-name layouts.
+  static String _findNameNearPriceLine(
+    List<String> lines,
+    int priceLineIdx,
+    int minLine,
+  ) {
+    final back = _findNameBeforePriceLine(lines, priceLineIdx, minLine);
+    final forward = _findNameAfterPriceLine(lines, priceLineIdx);
+
+    if (forward.isNotEmpty && back.isNotEmpty) {
+      final backLine = _lineIndexOfName(lines, back, priceLineIdx, minLine, upward: true);
+      final fwdLine =
+          _lineIndexOfName(lines, forward, priceLineIdx, minLine, upward: false);
+      if (backLine != null && fwdLine != null) {
+        final backDist = priceLineIdx - backLine;
+        final fwdDist = fwdLine - priceLineIdx;
+        return backDist <= fwdDist ? back : forward;
+      }
+      return back;
+    }
+    if (forward.isNotEmpty) return forward;
+    return back;
+  }
+
+  static int? _lineIndexOfName(
+    List<String> lines,
+    String name,
+    int fromLine,
+    int minLine, {
+    required bool upward,
+  }) {
+    final needle = name.toLowerCase();
+    if (upward) {
+      for (int i = fromLine - 1; i >= minLine; i--) {
+        if (lines[i].toLowerCase().contains(needle)) return i;
+      }
+    } else {
+      for (int i = fromLine + 1; i < lines.length && i <= fromLine + 6; i++) {
+        if (lines[i].toLowerCase().contains(needle)) return i;
+      }
+    }
+    return null;
+  }
+
+  static List<({String name, double qty, double unit, double total})>
+      _recoverOrphanEkassaItems(
+    List<({String name, double qty, double unit, double total})> items,
+    List<String> lines,
+    int tableIdx,
+    String Function(String) normNum,
+    double? labeledTotal,
+  ) {
+    if (items.isEmpty) return items;
+
+    final allPrices = _collectProductPriceRows(lines, tableIdx, normNum);
+    final minLine = tableIdx >= 0 ? tableIdx + 1 : 0;
+    final recovered = List<({String name, double qty, double unit, double total})>.from(items);
+
+    for (final pr in allPrices) {
+      final row = (qty: pr.qty, unit: pr.unit, total: pr.total);
+      if (_priceRowUsed(row, recovered)) continue;
+
+      final name = _findNameNearPriceLine(lines, pr.lineIdx, minLine);
+      if (name.isEmpty) continue;
+
+      final item = (name: name, qty: pr.qty, unit: pr.unit, total: pr.total);
+      if (!_isValidEkassaItem(item)) continue;
+      recovered.add(item);
+    }
+
+    recovered.sort((a, b) {
+      final ia = allPrices.indexWhere((p) => (p.total - a.total).abs() < 0.02);
+      final ib = allPrices.indexWhere((p) => (p.total - b.total).abs() < 0.02);
+      return ia.compareTo(ib);
+    });
+
+    if (labeledTotal != null && labeledTotal > 0) {
+      final sum = recovered.fold(0.0, (s, i) => s + i.total);
+      if (sum - labeledTotal > 0.5) {
+        return items;
+      }
+    }
+
+    return recovered;
+  }
+
+  static bool _isTableHeaderFragment(String l) {
+    final t = l.trim();
+    if (RegExp(r'^\*{3,}$').hasMatch(t)) return true;
+    return RegExp(
+      r'^(Product|Quantity|Price|Total|Məhsul|Say|Qiymət|Cəmi)$',
+      caseSensitive: false,
+    ).hasMatch(t);
   }
 
   static bool _isValidEkassaPriceRow(({double qty, double unit, double total}) p) {
@@ -632,6 +1439,8 @@ class OcrService {
   static bool _isValidEkassaItem(({String name, double qty, double unit, double total}) item) {
     if (item.name.trim().length < 2 || item.name.length > 80) return false;
     if (_isLikelyAddressOrMetadata(item.name)) return false;
+    if (_hasVatNoiseName(item.name)) return false;
+    if (_isEkassaFooterLabelName(item.name)) return false;
     if (item.total == 0 && item.unit == 0 && item.qty >= 1) return true;
     return _isValidEkassaPriceRow((qty: item.qty, unit: item.unit, total: item.total));
   }
@@ -718,7 +1527,7 @@ class OcrService {
     List<String> lines,
     String Function(String) normNum,
   ) {
-    final qtyRe = RegExp(r'^(\d+)$');
+    final qtyRe = RegExp(r'^(\d+(?:\.\d+)?)$');
     final moneyRe = RegExp(r'^(\d+(?:\.\d+)?)$');
     final prices = <({double qty, double unit, double total})>[];
     var firstPriceIdx = -1;
@@ -763,17 +1572,26 @@ class OcrService {
         return i;
       }
     }
-    for (int i = 0; i < lines.length - 2; i++) {
-      final window = lines.sublist(i, (i + 5).clamp(0, lines.length)).join(' ').toLowerCase();
-      if (window.contains('product') &&
-          window.contains('quantity') &&
-          window.contains('total')) {
+    // Split English header: "Quantity Price Total" / "Product"
+    for (int i = 0; i < lines.length - 1; i++) {
+      final a = lines[i].toLowerCase();
+      final b = lines[i + 1].toLowerCase();
+      if (a.contains('quantity') &&
+          a.contains('price') &&
+          a.contains('total') &&
+          b.contains('product')) {
         return i;
       }
-      if (window.contains('məhsul') && window.contains('say')) return i;
+      if (a.contains('məhsul') && b.contains('say')) return i;
     }
     for (int i = 0; i < lines.length - 1; i++) {
       final pair = '${lines[i]} ${lines[i + 1]}'.toLowerCase();
+      if (pair.contains('product') &&
+          pair.contains('quantity') &&
+          pair.contains('price') &&
+          pair.contains('total')) {
+        return i;
+      }
       if (pair.contains('say') && (pair.contains('qiym') || pair.contains('cəmi'))) {
         return i;
       }
@@ -822,8 +1640,29 @@ class OcrService {
         caseSensitive: false,
       ).hasMatch(l);
 
-  static bool _isEkassaVatLine(String l) =>
-      RegExp(r'^\*.*(VAT|ƏDV|exempt)', caseSensitive: false).hasMatch(l.trim());
+  static bool _isEkassaVatLine(String l) {
+    final t = l.trim();
+    if (t.length > 40) return false;
+    if (RegExp(r'=\s*\d', caseSensitive: false).hasMatch(t)) return false;
+    if (RegExp(r'^\*?\s*(?:VAT|ƏDV)[:\s-]', caseSensitive: false).hasMatch(t)) {
+      return true;
+    }
+    if (RegExp(r'^\*?\s*(?:VAT|ƏDV)-exempt', caseSensitive: false).hasMatch(t)) {
+      return true;
+    }
+    // SUNMI receipts use *Trade markup: 18% per line item (not *VAT:).
+    if (RegExp(r'^\*?\s*Trade\s+markup', caseSensitive: false).hasMatch(t)) {
+      return true;
+    }
+    return false;
+  }
+
+  static bool _isEkassaFooterLabelName(String name) {
+    return RegExp(
+      r'^(?:Prepayment|Credit|Bonus|Cashless|Cash|Paid|Change|Payment|Nisyə|Avans):?$',
+      caseSensitive: false,
+    ).hasMatch(name.trim());
+  }
 
   /// English e-kassa: "Dəst (...) 1 19.99 19.99" on one line.
   static List<({String name, double qty, double unit, double total})> _extractInlineEkassaItems(
@@ -964,12 +1803,16 @@ class OcrService {
     final sb = StringBuffer();
     if (store.isNotEmpty) sb.writeln('STORE: $store');
     if (date.isNotEmpty) sb.writeln('DATE: $date');
-    if (total > 0) sb.writeln('TOTAL: ${total.toStringAsFixed(2)} AZN');
+    if (total > 0) sb.writeln('TOTAL: ${ReceiptNumbers.formatLineTotal(total)} AZN');
+    final fiscalId = _extractEkassaFiscalId(lines);
+    if (fiscalId.isNotEmpty) sb.writeln('FISCAL_ID: $fiscalId');
     sb.writeln('---');
     for (final item in items) {
       final cleanName = item.name.replaceAll(RegExp(r'\s+'), ' ').trim();
       sb.writeln(
-        'ITEM: $cleanName | QTY: ${item.qty.toStringAsFixed(2)} | UNIT: ${item.unit.toStringAsFixed(2)} | TOTAL: ${item.total.toStringAsFixed(2)}',
+        'ITEM: $cleanName | QTY: ${ReceiptNumbers.formatQuantity(item.qty)} | '
+        'UNIT: ${ReceiptNumbers.formatUnitPrice(item.unit)} | '
+        'TOTAL: ${ReceiptNumbers.formatLineTotal(item.total)}',
       );
     }
     return sb.toString();
@@ -1006,6 +1849,18 @@ class OcrService {
     return '';
   }
 
+  static String _extractEkassaFiscalId(List<String> lines) {
+    final labeled = RegExp(
+      r'(?:Fiskal|Fiscal)\s*(?:İD|ID|Id|id)[:\s]*([A-Za-z0-9_-]+)',
+      caseSensitive: false,
+    );
+    for (final l in lines) {
+      final m = labeled.firstMatch(l.trim());
+      if (m != null) return m.group(1)!;
+    }
+    return '';
+  }
+
   /// Reads receipt total from Cəmi/Total lines — never from change/cash paid.
   static double? _extractLabeledTotal(List<String> lines) {
     final exclude = RegExp(
@@ -1027,15 +1882,55 @@ class OcrService {
       if (m != null) {
         return double.tryParse(m.group(1)!.replaceAll(',', '.'));
       }
-      if (labelOnly.hasMatch(l) && i + 1 < lines.length) {
-        final next = lines[i + 1].trim();
-        if (exclude.hasMatch(next)) continue;
-        final n = RegExp(r'^(\d+[.,]\d+)').firstMatch(next);
-        if (n != null) {
-          return double.tryParse(n.group(1)!.replaceAll(',', '.'));
+      if (labelOnly.hasMatch(l)) {
+        double? before;
+        double? after;
+        if (i > 0) {
+          final b = RegExp(r'^(\d+[.,]\d+)').firstMatch(lines[i - 1].trim());
+          if (b != null) {
+            before = double.tryParse(b.group(1)!.replaceAll(',', '.'));
+          }
         }
+        if (i + 1 < lines.length) {
+          final next = lines[i + 1].trim();
+          if (!exclude.hasMatch(next)) {
+            final a = RegExp(r'^(\d+[.,]\d+)').firstMatch(next);
+            if (a != null) {
+              after = double.tryParse(a.group(1)!.replaceAll(',', '.'));
+            }
+          }
+        }
+        // English e-kassa often puts the grand total on the line BEFORE "Total".
+        if (before != null && (after == null || before >= after)) return before;
+        if (after != null) return after;
+        continue;
       }
     }
+
+    // Footer block: grand total is often the largest standalone amount near "Total"
+    // (smaller lines may be VAT-exempt / VAT 18% subtotals).
+    final totalIdx = lines.indexWhere(
+      (l) => RegExp(r'^(?:Cəmi|Total)\.?\s*$', caseSensitive: false).hasMatch(l.trim()),
+    );
+    if (totalIdx >= 0) {
+      final amounts = <double>[];
+      for (int i = totalIdx; i < lines.length && i < totalIdx + 12; i++) {
+        final l = lines[i].trim();
+        if (RegExp(r'Payment type|Ödəniş|Paid cash|Nağd', caseSensitive: false).hasMatch(l)) {
+          break;
+        }
+        if (RegExp(r'qaytarılıb|Change|Paid', caseSensitive: false).hasMatch(l)) continue;
+        final solo = RegExp(r'^(\d+[.,]\d+)$').firstMatch(l);
+        if (solo != null) {
+          final v = double.tryParse(solo.group(1)!.replaceAll(',', '.'));
+          if (v != null && v > 0 && v < 500) amounts.add(v);
+        }
+      }
+      if (amounts.isNotEmpty) {
+        return amounts.reduce((a, b) => a > b ? a : b);
+      }
+    }
+
     return null;
   }
 
@@ -1044,6 +1939,7 @@ class OcrService {
 
 class _OcrLine {
   final double top;
+  final double left;
   final String text;
-  const _OcrLine({required this.top, required this.text});
+  const _OcrLine({required this.top, this.left = 0, required this.text});
 }

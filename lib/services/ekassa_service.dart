@@ -4,8 +4,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import '../models/receipt.dart';
-import 'ocr_service.dart';
-import 'receipt_parser_service.dart';
+import 'receipt_ocr_pipeline.dart';
 
 class EkassaService {
   static const _baseUrl =
@@ -16,7 +15,6 @@ class EkassaService {
     final v = qrValue.trim();
     if (v.isEmpty) return null;
 
-    // doc= in hash (#/index?doc=…) or query string
     final docParam = RegExp(r'[?&]doc=([A-Za-z0-9_-]+)', caseSensitive: false)
         .firstMatch(v);
     if (docParam != null) return docParam.group(1);
@@ -29,11 +27,26 @@ class EkassaService {
       }
     } catch (_) {}
 
-    if (RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(v)) return v;
+    if (RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(v)) {
+      // Product barcodes (EAN/UPC) are digits-only and shorter than fiscal IDs.
+      if (RegExp(r'^\d+$').hasMatch(v) && v.length <= 14) return null;
+      if (v.length < 8) return null;
+      if (!RegExp(r'[A-Za-z]').hasMatch(v) && v.length < 20) return null;
+      return v;
+    }
     return null;
   }
 
-  /// Downloads the government receipt image to a temp file. Caller may delete after use.
+  /// Picks the first raw scan value that contains an e-kassa document ID.
+  static String? pickDocumentIdFromRawValues(Iterable<String> rawValues) {
+    for (final raw in rawValues) {
+      final v = raw.trim();
+      if (v.isEmpty) continue;
+      if (extractDocumentId(v) != null) return v;
+    }
+    return null;
+  }
+
   static Future<String> fetchReceiptImagePath(String documentId) async {
     final docId = extractDocumentId(documentId) ?? documentId;
     if (!RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(docId)) {
@@ -81,7 +94,7 @@ class EkassaService {
     return file.path;
   }
 
-  /// Fiscal ID / QR → government JPEG → OCR → AI → structured [Receipt].
+  /// QR → government JPEG → Apple Vision OCR (iOS) → structured parse.
   static Future<Receipt> fetchAndParse(String qrOrDocumentId) async {
     final docId = extractDocumentId(qrOrDocumentId);
     if (docId == null || docId.isEmpty) {
@@ -90,29 +103,14 @@ class EkassaService {
 
     final imagePath = await fetchReceiptImagePath(docId);
     try {
-      final ocrText = await OcrService.recognizeMultiple([imagePath]);
-      debugPrint('[Ekassa] OCR for $docId:\n$ocrText');
-      if (ocrText.trim().isEmpty) {
-        throw Exception(
-          'Could not read text from government receipt. Try photo scan.',
-        );
-      }
-
-      final parsed =
-          (await ReceiptParserService.parse(ocrText)).withCorrectedTotals();
-      debugPrint('[Ekassa] Parsed: ${jsonEncode(parsed.toJson())}');
-      return Receipt(
-        store: parsed.store,
-        date: parsed.date,
-        items: parsed.items,
-        subtotal: parsed.subtotal,
-        serviceCharge: parsed.serviceCharge,
-        vat: parsed.vat,
-        total: parsed.total,
-        currency: parsed.currency,
-        isGovernmentVerified: true,
+      final parsed = await ReceiptOcrPipeline.parseImages(
+        [imagePath],
         documentId: docId,
+        isGovernmentVerified: true,
+        requireItems: true,
       );
+      debugPrint('[Ekassa] Parsed: ${jsonEncode(parsed.toJson())}');
+      return parsed;
     } finally {
       try {
         await File(imagePath).delete();

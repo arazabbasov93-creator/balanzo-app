@@ -99,27 +99,49 @@ class Receipt {
       };
 
   /// Fixes OCR mistakes like using change/cash-paid as receipt total.
+  /// Keeps government receipt total when line items are incomplete.
   Receipt withCorrectedTotals() {
     final itemsSum = items.fold(0.0, (s, i) => s + i.totalPrice);
     if (itemsSum <= 0) return this;
 
+    // Parsed items incomplete — keep receipt header total (e-kassa grand total).
+    final ekassaReceipt =
+        isGovernmentVerified || (documentId != null && documentId!.isNotEmpty);
+    if (ekassaReceipt &&
+        total > itemsSum + 0.5 &&
+        total < itemsSum * 3) {
+      return Receipt(
+        store: store,
+        date: date,
+        items: items,
+        subtotal: itemsSum,
+        serviceCharge: serviceCharge,
+        vat: vat,
+        total: total,
+        currency: currency,
+        isGovernmentVerified: isGovernmentVerified,
+        documentId: documentId,
+      );
+    }
+
     final looksLikeChangeOrCash =
         total > itemsSum * 1.35 && total > itemsSum + 1.0;
-    if (!looksLikeChangeOrCash) return this;
+    if (looksLikeChangeOrCash) {
+      final correctedTotal = itemsSum + (serviceCharge ?? 0);
+      return Receipt(
+        store: store,
+        date: date,
+        items: items,
+        subtotal: itemsSum,
+        serviceCharge: serviceCharge,
+        vat: vat,
+        total: correctedTotal,
+        currency: currency,
+        isGovernmentVerified: isGovernmentVerified,
+        documentId: documentId,
+      );
+    }
 
-    final correctedSubtotal = itemsSum;
-    final correctedTotal = itemsSum + (serviceCharge ?? 0);
-    return Receipt(
-      store: store,
-      date: date,
-      items: items,
-      subtotal: correctedSubtotal,
-      serviceCharge: serviceCharge,
-      vat: vat,
-      total: correctedTotal,
-      currency: currency,
-      isGovernmentVerified: isGovernmentVerified,
-      documentId: documentId,
-    );
+    return this;
   }
 }

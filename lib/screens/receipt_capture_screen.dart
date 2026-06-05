@@ -2,14 +2,16 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../app_state.dart';
 import '../l10n/app_strings.dart';
 import '../models/receipt.dart';
 import '../services/analytics_service.dart';
-import '../services/ocr_service.dart';
-import '../services/receipt_parser_service.dart';
+import '../services/receipt_ocr_pipeline.dart';
 import 'ekassa_qr_screen.dart';
+import 'fiscal_id_screen.dart';
+import 'manual_entry_screen.dart';
 import 'receipt_result_sheet.dart';
 
 class ReceiptCaptureScreen extends StatefulWidget {
@@ -65,6 +67,16 @@ class _ReceiptCaptureScreenState extends State<ReceiptCaptureScreen>
   }
 
   Future<void> _initCamera() async {
+    if (Platform.isAndroid) {
+      final status = await Permission.camera.request();
+      if (!status.isGranted) {
+        if (mounted) {
+          _snack('Camera permission is required to scan receipts.', error: true);
+        }
+        return;
+      }
+    }
+
     final cameras = await availableCameras();
     if (cameras.isEmpty || !mounted) return;
     final ctrl = CameraController(
@@ -119,17 +131,8 @@ class _ReceiptCaptureScreenState extends State<ReceiptCaptureScreen>
     if (_paths.isEmpty || _processing) return;
     setState(() => _processing = true);
     try {
-      final ocrText = await OcrService.recognizeMultiple(_paths);
-      debugPrint('=== STITCHED OCR ===\n$ocrText\n===================');
-
-      if (ocrText.trim().isEmpty) {
-        _snack('No text detected. Try better lighting or use the gallery button.', error: true);
-        return;
-      }
-
-      debugPrint('SENDING TO AI:\n$ocrText');
-      final receipt =
-          (await ReceiptParserService.parse(ocrText)).withCorrectedTotals();
+      final receipt = await ReceiptOcrPipeline.parseImages(_paths);
+      debugPrint('=== PARSED RECEIPT ===\n${receipt.toJson()}\n=====================');
       debugPrint('=== PARSED RECEIPT ===\n${receipt.toJson()}\n=====================');
       if (!mounted) return;
       final prefs = await SharedPreferences.getInstance();
@@ -143,7 +146,12 @@ class _ReceiptCaptureScreenState extends State<ReceiptCaptureScreen>
       _showReceiptResult(receipt);
     } catch (e) {
       debugPrint('Process error: $e');
-      _snack('Processing failed: $e', error: true);
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      if (msg.contains('Could not read text')) {
+        _snack('No text detected. Try better lighting or use the gallery button.', error: true);
+      } else {
+        _snack('Processing failed: $msg', error: true);
+      }
     } finally {
       if (mounted) setState(() => _processing = false);
     }
@@ -164,7 +172,11 @@ class _ReceiptCaptureScreenState extends State<ReceiptCaptureScreen>
           });
         },
       ),
-    );
+    ).then((result) {
+      if (result is ReceiptSaveResult && mounted) {
+        Navigator.of(context).pop(result);
+      }
+    });
   }
 
   void _removePhoto(int index) => setState(() => _paths.removeAt(index));
@@ -172,6 +184,18 @@ class _ReceiptCaptureScreenState extends State<ReceiptCaptureScreen>
   Future<void> _openEkassaQrScanner() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(builder: (_) => const EkassaQrScreen()),
+    );
+  }
+
+  Future<void> _enterFiscalId() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => const FiscalIdScreen()),
+    );
+  }
+
+  Future<void> _openManualEntry() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => const ManualEntryScreen()),
     );
   }
 
@@ -279,7 +303,7 @@ class _ReceiptCaptureScreenState extends State<ReceiptCaptureScreen>
           const Spacer(),
           IconButton(
             icon: const Icon(Icons.qr_code_scanner, color: Colors.white),
-            tooltip: 'Scan e-kassa QR',
+            tooltip: AppStrings.get('scan_ekassa_qr', currentLanguage.value),
             onPressed: _openEkassaQrScanner,
           ),
         ],
@@ -350,13 +374,8 @@ class _ReceiptCaptureScreenState extends State<ReceiptCaptureScreen>
     );
   }
 
-  // HIDDEN: DVX API Phase 2 — reserved; do not delete.
-  // ignore: unused_element
-  Future<void> _enterFiscalId() async {
-    // Fiscal ID entry removed — DVX API Phase 2. See ekassa_service.dart.
-  }
-
   Widget _buildPhotoControls() {
+    final lang = currentLanguage.value;
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -372,7 +391,7 @@ class _ReceiptCaptureScreenState extends State<ReceiptCaptureScreen>
               child: OutlinedButton.icon(
                 onPressed: _processing ? null : _openEkassaQrScanner,
                 icon: const Icon(Icons.qr_code_scanner, size: 18),
-                label: const Text('Scan e-kassa QR (fiscal ID)'),
+                label: Text(AppStrings.get('scan_ekassa_qr', lang)),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
                   side: const BorderSide(color: Color(0xFF81C784)),
@@ -383,13 +402,55 @@ class _ReceiptCaptureScreenState extends State<ReceiptCaptureScreen>
                 ),
               ),
             ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _processing ? null : _enterFiscalId,
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: Text(
+                      AppStrings.get('enter_fiscal_id', lang),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: BorderSide(color: Colors.white.withValues(alpha: 0.35)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _processing ? null : _openManualEntry,
+                    icon: const Icon(Icons.receipt_long_outlined, size: 16),
+                    label: Text(
+                      AppStrings.get('manual_entry', lang),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: BorderSide(color: Colors.white.withValues(alpha: 0.35)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: (_paths.length < _maxPhotos && !_processing && _camReady) ? _capture : null,
                 icon: const Icon(Icons.camera_alt_outlined, size: 18),
-                label: const Text('Take Photo'),
+                label: Text(AppStrings.get('take_photo', lang)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF4CAF50),
                   foregroundColor: Colors.white,
@@ -405,7 +466,7 @@ class _ReceiptCaptureScreenState extends State<ReceiptCaptureScreen>
               child: ElevatedButton.icon(
                 onPressed: _processing ? null : _pickFromGallery,
                 icon: const Icon(Icons.photo_library_outlined, size: 18),
-                label: const Text('Upload from Gallery'),
+                label: Text(AppStrings.get('upload_from_gallery', lang)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white.withValues(alpha: 0.15),
                   foregroundColor: Colors.white,

@@ -8,6 +8,7 @@ const _map = <String, IconData>{
   'checkroom': Icons.checkroom,
   'bolt': Icons.bolt,
   'school': Icons.school,
+  'smoking_rooms': Icons.smoking_rooms,
   'category': Icons.category,
   'home': Icons.home,
   'sports': Icons.sports,

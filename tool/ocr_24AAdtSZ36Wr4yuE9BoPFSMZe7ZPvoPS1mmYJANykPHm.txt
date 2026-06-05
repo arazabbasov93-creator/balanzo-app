@@ -1,0 +1,95 @@
+Object name: MaHaLLa MARKET
+Object address: AZ1052 BAKI ŞAHARİ
+NARIMANOV RAYONU YUSİF VAZİR
+ÇaMaNZaMiNLİ ev.123 A m.-
+Object code: 1503168422-15001
+Taxpayer name: İBRAHİMZADA EMİN ALİ
+OĞLU
+TIN: 1503168422
+Sale receipt Nº 268825
+29.05.2026
+Cashier: (
+Kassir Date:
+Time:
+12:13:37
+Ammmnammmnannnnnпnnnааттnаатттаатттааттпаннння
+Quantity Price Total
+Product
+15
+YUMURTA
+0.17 2.55
+(pc)
+*VAT-exempt
+1
+(pc)
+2.90
+2.90
+MILLA XAMA 300 QR 20
+*VAT: 18%
+1
+3.74 3.74
+MILLA PENDIR QAYMAQLI (pc)
+250 QR
+*VAT: 18%
+(kg)
+0.300
+YASKINO VAFLI FINDIQ-U
+ZUM SHOK KQ
+13,1 3.95
+*VAT: 18%
+YASKINO TRUBKA VAFLI K (kg)
+11.2 3.38
+0.300
+5
+*VAT: 18%
+SUPER RUPER-VOZDUS(kg)
+0.155
+9.75 1.51
+PSHEN KQ ASSORTI
+14.0 10.0
+0.715
+ASSORTI CHEESCAKE M.
+(kg)
+0
+1
+*VAT-exempt
+1
+(pc)
+COCA COLA 2 LT PR
+2.30 2.30
+*VAT: 18%
+MEHELLE PAKET
+(pc)
+0.04 0.08
+*VAT: 18%
+Total
+30.42
+17.86
+*VAT 18% = 2.72
+12.56
+*VAT-exempt
+*Total tax = 2.72
+Payment type
+0.00
+Cashless:
+Cash:
+30.42
+* Paid cash:
+50.00
+* Change:
+19.58
+0.00
+Bonus:
+0.00
+Prepayment:
+Credit:
+0.00
+Receipt order in shift: 136
+Cash register model: TPS575 Smart POS
+Cash register factory number: 2001G57500300989
+Fiscal ID: 24AAdtSZ36Wrl
+Cashbox registration number: 0000011143
+www.e-kassa.gov.az
+VAT refund
+*ХЖх*хх***ххх**ххх**ххх**х*х**хх***хх***хх***»
+No VAT refund on the receipt.

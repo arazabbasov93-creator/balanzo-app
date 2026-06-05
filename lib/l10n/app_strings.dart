@@ -36,7 +36,11 @@ class AppStrings {
       'save_receipt': 'Save Receipt',
       'saving': 'Saving...',
       'scan_qr_code': 'Scan QR Code',
+      'scan_ekassa_qr': 'Scan e-kassa QR',
       'scan_qr_hint': 'Point at the QR code on your receipt',
+      'take_photo': 'Take Photo',
+      'upload_from_gallery': 'Upload from Gallery',
+      'fetching_receipt': 'Fetching receipt {id}…',
       'processing_receipt': 'Processing receipt...',
       // Home / Dashboard
       'monthly_spend': 'Monthly Spend',
@@ -48,6 +52,71 @@ class AppStrings {
       'scan_to_start': 'Scan a receipt to get started',
       'scan_first_receipt': 'Scan your first receipt to start tracking',
       'spent_in': 'Spent in',
+      'tab_personal': 'Personal',
+      'tab_family': 'Family',
+      'dash_avg_receipt': 'Avg receipt',
+      'dash_stores': 'Stores',
+      'dash_items': 'Items',
+      'dash_this_week': 'This week',
+      'dash_last_week': 'Last week',
+      'dash_this_month': 'This month',
+      'dash_last_month': 'Last month',
+      'dash_last_year_month': 'Same month last year',
+      'dash_vs_last_month': 'vs last month',
+      'dash_vs_last_year': 'vs last year (this month)',
+      'ai_upgrade': 'Upgrade',
+      'dash_top_category': 'Top category',
+      'dash_top_stores': 'Top stores',
+      'dash_most_bought': 'Most bought',
+      'dash_most_often': 'Buy most often',
+      'dash_top_spend_item': 'Biggest spend',
+      'dash_period_fallback': 'No receipts this month yet — showing',
+      'dash_no_categories': 'Receipts saved, but categories are missing for this period.',
+      'dash_inflation': 'Price change',
+      'dash_most_by_qty': 'Most by quantity',
+      'dash_most_by_value': 'Most by spend',
+      'dash_qty_unit': 'qty',
+      'dash_category_spend': 'Category spend',
+      'dash_no_category_items': 'No line items found for this category.',
+      'dash_tap_for_details': 'Tap a row for details',
+      'budget_section': 'Budget',
+      'budget_limits': 'Category limits',
+      'income_total': 'Income',
+      'spend_total': 'Spent',
+      'remaining_balance': 'Left to spend',
+      'family_income_total': 'Family income',
+      'family_spend_total': 'Family spent',
+      'income_editor_title': 'Your income this month',
+      'income_label': 'Source (salary, freelance…)',
+      'income_amount': 'Amount (AZN)',
+      'income_preset_salary': 'Salary',
+      'income_preset_rent': 'Rent',
+      'income_preset_freelance': 'Freelance',
+      'income_add_source': 'Add income source',
+      'income_recurring': 'Recurring every month',
+      'income_one_time': 'One-time this month',
+      'income_type_label': 'Income type',
+      'income_edit_source': 'Edit income source',
+      'income_delete': 'Delete',
+      'duplicate_receipt_title': 'Receipt already saved',
+      'view_receipt': 'View receipt',
+      'restock_ignore': 'Ignore',
+      'restock_bought': 'Bought',
+      'restock_clear': 'Clear',
+      'restock_avg_qty': 'Usual qty',
+      'restock_latest_price': 'Last price',
+      'restock_est_budget': 'Est. list total',
+      'restock_items_due': 'items on your list',
+      'restock_tap_hint': 'Mark bought or ignore',
+      'restock_days_overdue': 'days overdue',
+      'restock_due_today': 'Due today',
+      'restock_due_in': 'Due in',
+      'restock_days': 'days',
+      'restock_every': 'Every',
+      'restock_ignored': 'Ignored',
+      'share_shopping_list': 'Share list',
+      'restock_share_header': 'Shopping List (Balanzo):',
+      'restock_share_est_total': 'Est. total:',
       // Receipts
       'search_receipts': 'Search by store name…',
       'failed_to_load': 'Failed to load receipts',
@@ -71,6 +140,18 @@ class AppStrings {
       'delete_account': 'Delete Account',
       'upgrade': 'Get Premium',
       'upgrade_to_premium': 'Upgrade to Premium',
+      'upgrade_screen_title': 'Upgrade Balanzo',
+      'upgrade_hero_title': 'Unlock the Full Balanzo',
+      'upgrade_hero_subtitle': 'AI-powered insights, family sharing, and more',
+      'upgrade_choose_plan': 'Choose your plan',
+      'upgrade_free_forever': 'Free — forever',
+      'upgrade_most_popular': 'Most Popular',
+      'upgrade_monthly': 'Monthly',
+      'upgrade_annual': 'Annual',
+      'upgrade_save_16': 'Save 16%',
+      'upgrade_now': 'Upgrade Now',
+      'upgrade_cancel_note': 'Cancel anytime. Payments processed securely.',
+      'upgrade_success': 'Subscription updated! Enjoy Balanzo Premium.',
       'get_premium': 'Get Premium',
       'free_plan': 'Free Plan',
       'ai_premium': 'AI Premium',
@@ -117,6 +198,17 @@ class AppStrings {
       'cat_dairy': 'Dairy',
       'cat_vegetables': 'Vegetables',
       'cat_household': 'Household',
+      'cat_grocery': 'Grocery',
+      'cat_restaurant': 'Restaurant',
+      'cat_tobacco': 'Tobacco',
+      'cat_transport': 'Transport',
+      'cat_health': 'Health',
+      'cat_clothing': 'Clothing',
+      'cat_utilities': 'Utilities',
+      'cat_education': 'Education',
+      'cat_other': 'Other',
+      'no_receipts_in_period': 'No receipts in this period',
+      'income_sources': 'Income sources',
       'filter_by_category': 'Filter by category',
     },
     'az': {
@@ -155,7 +247,11 @@ class AppStrings {
       'save_receipt': 'Qəbzi saxla',
       'saving': 'Saxlanır...',
       'scan_qr_code': 'QR Kodu Skan et',
+      'scan_ekassa_qr': 'e-kassa QR skan et',
       'scan_qr_hint': 'Qəbzinizdəki QR koduna yönəldin',
+      'take_photo': 'Foto çək',
+      'upload_from_gallery': 'Qalereyadan yüklə',
+      'fetching_receipt': 'Qəbz əldə edilir {id}…',
       'processing_receipt': 'Qəbz emal edilir...',
       // Home / Dashboard
       'monthly_spend': 'Aylıq Xərc',
@@ -167,6 +263,71 @@ class AppStrings {
       'scan_to_start': 'Başlamaq üçün qəbz skan edin',
       'scan_first_receipt': 'İzləməyə başlamaq üçün ilk qəbzinizi skan edin',
       'spent_in': 'xərcləndi',
+      'tab_personal': 'Şəxsi',
+      'tab_family': 'Ailə',
+      'dash_avg_receipt': 'Orta qəbz',
+      'dash_stores': 'Mağazalar',
+      'dash_items': 'Məhsul',
+      'dash_this_week': 'Bu həftə',
+      'dash_last_week': 'Keçən həftə',
+      'dash_this_month': 'Bu ay',
+      'dash_last_month': 'Keçən ay',
+      'dash_last_year_month': 'Keçən il eyni ay',
+      'dash_vs_last_month': 'keçən aya nisbətən',
+      'dash_vs_last_year': 'keçən ilin eyni ayına nisbətən',
+      'ai_upgrade': 'Yüksəlt',
+      'dash_top_category': 'Əsas kateqoriya',
+      'dash_top_stores': 'Top mağazalar',
+      'dash_most_bought': 'Ən çox alınan',
+      'dash_most_often': 'Tez-tez alınır',
+      'dash_top_spend_item': 'Ən böyük xərc',
+      'dash_period_fallback': 'Bu ay hələ qəbz yoxdur — göstərilir',
+      'dash_no_categories': 'Qəbzlər var, amma bu dövr üçün kateqoriya məlumatı yoxdur.',
+      'dash_inflation': 'Qiymət dəyişimi',
+      'dash_most_by_qty': 'Ən çox miqdar',
+      'dash_most_by_value': 'Ən böyük xərc',
+      'dash_qty_unit': 'ədəd',
+      'dash_category_spend': 'Kateqoriya xərci',
+      'dash_no_category_items': 'Bu kateqoriya üçün məhsul tapılmadı.',
+      'dash_tap_for_details': 'Detallar üçün toxunun',
+      'budget_section': 'Büdcə',
+      'budget_limits': 'Kateqoriya limitləri',
+      'income_total': 'Gəlir',
+      'spend_total': 'Xərc',
+      'remaining_balance': 'Qalan',
+      'family_income_total': 'Ailə gəliri',
+      'family_spend_total': 'Ailə xərci',
+      'income_editor_title': 'Bu ay gəliriniz',
+      'income_label': 'Mənbə (maaş, freelance…)',
+      'income_amount': 'Məbləğ (AZN)',
+      'income_preset_salary': 'Maaş',
+      'income_preset_rent': 'Kirayə',
+      'income_preset_freelance': 'Freelance',
+      'income_add_source': 'Gəlir mənbəyi əlavə et',
+      'income_recurring': 'Hər ay təkrarlanan',
+      'income_one_time': 'Yalnız bu ay',
+      'income_type_label': 'Gəlir növü',
+      'income_edit_source': 'Gəlir mənbəyini redaktə et',
+      'income_delete': 'Sil',
+      'duplicate_receipt_title': 'Qəbz artıq saxlanılıb',
+      'view_receipt': 'Qəbzi aç',
+      'restock_ignore': 'Yox say',
+      'restock_bought': 'Alındı',
+      'restock_clear': 'Təmizlə',
+      'restock_avg_qty': 'Adi miqdar',
+      'restock_latest_price': 'Son qiymət',
+      'restock_est_budget': 'Təxmini siyahı',
+      'restock_items_due': 'məhsul siyahıda',
+      'restock_tap_hint': 'Alındı və ya yox say',
+      'restock_days_overdue': 'gün gecikib',
+      'restock_due_today': 'Bu gün',
+      'restock_due_in': 'Son',
+      'restock_days': 'gün',
+      'restock_every': 'Hər',
+      'restock_ignored': 'Yox sayılıb',
+      'share_shopping_list': 'Siyahını paylaş',
+      'restock_share_header': 'Alış-veriş siyahısı (Balanzo):',
+      'restock_share_est_total': 'Təxmini cəm:',
       // Receipts
       'search_receipts': 'Mağaza adına görə axtar…',
       'failed_to_load': 'Qəbzlər yüklənmədi',
@@ -190,6 +351,18 @@ class AppStrings {
       'delete_account': 'Hesabı sil',
       'upgrade': 'Premium al',
       'upgrade_to_premium': 'Premiuma Keçin',
+      'upgrade_screen_title': 'Balanzo Premium',
+      'upgrade_hero_title': 'Balanzonun tam imkanları',
+      'upgrade_hero_subtitle': 'AI analitika, ailə paylaşımı və daha çox',
+      'upgrade_choose_plan': 'Plan seçin',
+      'upgrade_free_forever': 'Pulsuz — həmişəlik',
+      'upgrade_most_popular': 'Ən populyar',
+      'upgrade_monthly': 'Aylıq',
+      'upgrade_annual': 'İllik',
+      'upgrade_save_16': '16% endirim',
+      'upgrade_now': 'İndi yüksəlt',
+      'upgrade_cancel_note': 'İstənilən vaxt ləğv edin. Ödənişlər təhlükəsizdir.',
+      'upgrade_success': 'Abunə yeniləndi! Balanzo Premium-dan həzz alın.',
       'get_premium': 'Premium al',
       'free_plan': 'Pulsuz Plan',
       'ai_premium': 'AI Premium',
@@ -235,6 +408,17 @@ class AppStrings {
       'cat_dairy': 'Süd məhsulları',
       'cat_vegetables': 'Tərəvəz',
       'cat_household': 'Məişət',
+      'cat_grocery': 'Məhsul',
+      'cat_restaurant': 'Restoran',
+      'cat_tobacco': 'Siqaret',
+      'cat_transport': 'Nəqliyyat',
+      'cat_health': 'Sağlamlıq',
+      'cat_clothing': 'Geyim',
+      'cat_utilities': 'Kommunal',
+      'cat_education': 'Təhsil',
+      'cat_other': 'Digər',
+      'no_receipts_in_period': 'Bu dövrdə qəbz yoxdur',
+      'income_sources': 'Gəlir mənbələri',
       'filter_by_category': 'Kateqoriyaya görə filtr',
     },
     'ru': {
@@ -273,7 +457,11 @@ class AppStrings {
       'save_receipt': 'Сохранить чек',
       'saving': 'Сохраняю...',
       'scan_qr_code': 'Сканировать QR-код',
+      'scan_ekassa_qr': 'Сканировать e-kassa QR',
       'scan_qr_hint': 'Наведите на QR-код на чеке',
+      'take_photo': 'Сделать фото',
+      'upload_from_gallery': 'Загрузить из галереи',
+      'fetching_receipt': 'Получение чека {id}…',
       'processing_receipt': 'Обработка чека...',
       // Home / Dashboard
       'monthly_spend': 'Расходы за месяц',
@@ -285,6 +473,71 @@ class AppStrings {
       'scan_to_start': 'Отсканируйте чек для начала',
       'scan_first_receipt': 'Отсканируйте первый чек для начала отслеживания',
       'spent_in': 'потрачено',
+      'tab_personal': 'Личные',
+      'tab_family': 'Семья',
+      'dash_avg_receipt': 'Средний чек',
+      'dash_stores': 'Магазины',
+      'dash_items': 'Товары',
+      'dash_this_week': 'Эта неделя',
+      'dash_last_week': 'Прошлая',
+      'dash_this_month': 'Этот месяц',
+      'dash_last_month': 'Прошлый месяц',
+      'dash_last_year_month': 'Тот же месяц год назад',
+      'dash_vs_last_month': 'к прошлому месяцу',
+      'dash_vs_last_year': 'к тому же месяцу год назад',
+      'ai_upgrade': 'Премиум',
+      'dash_top_category': 'Топ категория',
+      'dash_top_stores': 'Топ магазины',
+      'dash_most_bought': 'Покупки',
+      'dash_most_often': 'Чаще всего',
+      'dash_top_spend_item': 'Крупнейшая',
+      'dash_period_fallback': 'В этом месяце пока нет — показано',
+      'dash_no_categories': 'Чеки есть, но категории за этот период не найдены.',
+      'dash_inflation': 'Изменение цен',
+      'dash_most_by_qty': 'По количеству',
+      'dash_most_by_value': 'По сумме',
+      'dash_qty_unit': 'шт.',
+      'dash_category_spend': 'Расход по категории',
+      'dash_no_category_items': 'Нет позиций в этой категории.',
+      'dash_tap_for_details': 'Нажмите для деталей',
+      'budget_section': 'Бюджет',
+      'budget_limits': 'Лимиты по категориям',
+      'income_total': 'Доход',
+      'spend_total': 'Расход',
+      'remaining_balance': 'Остаток',
+      'family_income_total': 'Доход семьи',
+      'family_spend_total': 'Расход семьи',
+      'income_editor_title': 'Ваш доход за месяц',
+      'income_label': 'Источник (зарплата, подработка…)',
+      'income_amount': 'Сумма (AZN)',
+      'income_preset_salary': 'Зарплата',
+      'income_preset_rent': 'Аренда',
+      'income_preset_freelance': 'Фриланс',
+      'income_add_source': 'Добавить источник дохода',
+      'income_recurring': 'Ежемесячно',
+      'income_one_time': 'Только этот месяц',
+      'income_type_label': 'Тип дохода',
+      'income_edit_source': 'Редактировать источник',
+      'income_delete': 'Удалить',
+      'duplicate_receipt_title': 'Чек уже сохранён',
+      'view_receipt': 'Открыть чек',
+      'restock_ignore': 'Скрыть',
+      'restock_bought': 'Купил',
+      'restock_clear': 'Очистить',
+      'restock_avg_qty': 'Обыч. кол-во',
+      'restock_latest_price': 'Посл. цена',
+      'restock_est_budget': 'Примерно',
+      'restock_items_due': 'товаров в списке',
+      'restock_tap_hint': 'Купил или скрыть',
+      'restock_days_overdue': 'дн. просрочки',
+      'restock_due_today': 'Сегодня',
+      'restock_due_in': 'Через',
+      'restock_days': 'дн.',
+      'restock_every': 'Каждые',
+      'restock_ignored': 'Скрыто',
+      'share_shopping_list': 'Поделиться',
+      'restock_share_header': 'Список покупок (Balanzo):',
+      'restock_share_est_total': 'Примерно всего:',
       // Receipts
       'search_receipts': 'Поиск по названию магазина…',
       'failed_to_load': 'Не удалось загрузить чеки',
@@ -308,6 +561,18 @@ class AppStrings {
       'delete_account': 'Удалить аккаунт',
       'upgrade': 'Получить Premium',
       'upgrade_to_premium': 'Обновить до Premium',
+      'upgrade_screen_title': 'Balanzo Premium',
+      'upgrade_hero_title': 'Полный доступ к Balanzo',
+      'upgrade_hero_subtitle': 'AI-аналитика, семейный доступ и многое другое',
+      'upgrade_choose_plan': 'Выберите план',
+      'upgrade_free_forever': 'Бесплатно — навсегда',
+      'upgrade_most_popular': 'Популярный',
+      'upgrade_monthly': 'Месяц',
+      'upgrade_annual': 'Год',
+      'upgrade_save_16': '−16%',
+      'upgrade_now': 'Оформить Premium',
+      'upgrade_cancel_note': 'Отмена в любое время. Безопасная оплата.',
+      'upgrade_success': 'Подписка обновлена! Приятного использования Premium.',
       'get_premium': 'Получить Premium',
       'free_plan': 'Бесплатный план',
       'ai_premium': 'AI Premium',
@@ -353,6 +618,17 @@ class AppStrings {
       'cat_dairy': 'Молочные',
       'cat_vegetables': 'Овощи',
       'cat_household': 'Бытовые',
+      'cat_grocery': 'Продукты',
+      'cat_restaurant': 'Рестораны',
+      'cat_tobacco': 'Табак',
+      'cat_transport': 'Транспорт',
+      'cat_health': 'Здоровье',
+      'cat_clothing': 'Одежда',
+      'cat_utilities': 'Коммунальные',
+      'cat_education': 'Образование',
+      'cat_other': 'Другое',
+      'no_receipts_in_period': 'Нет чеков за этот период',
+      'income_sources': 'Источники дохода',
       'filter_by_category': 'Фильтр по категории',
     },
   };
@@ -402,6 +678,115 @@ class AppStrings {
     }
   }
 
+  static String visitCount(int count, String locale) {
+    switch (locale) {
+      case 'az':
+        return count == 1 ? '1 dəfə' : '$count dəfə';
+      case 'ru':
+        return count == 1 ? '1 визит' : '$count визитов';
+      default:
+        return count == 1 ? '1 visit' : '$count visits';
+    }
+  }
+
+  static String purchaseCount(int count, String locale) {
+    switch (locale) {
+      case 'az':
+        return count == 1 ? '1 dəfə alınıb' : '$count dəfə alınıb';
+      case 'ru':
+        return count == 1 ? '1 покупка' : '$count покупок';
+      default:
+        return count == 1 ? '1 purchase' : '$count purchases';
+    }
+  }
+
+  static String familySetupHint(String locale) {
+    switch (locale) {
+      case 'az':
+        return 'Ailə interfeysini görmək üçün ailəyə qoşulun və ya yeni ailə yaradın — Profil bölməsində edə bilərsiniz.';
+      case 'ru':
+        return 'Чтобы открыть семейный режим, создайте семью или вступите в существующую — это можно сделать в разделе «Профиль».';
+      default:
+        return 'To see the family view, join a family or create one — you can do this in Profile.';
+    }
+  }
+
+  static String duplicateReceiptBody(
+    String scanner,
+    String store,
+    String locale,
+  ) {
+    switch (locale) {
+      case 'az':
+        return 'Bu qəbz artıq $scanner tərəfindən skan edilib ($store).';
+      case 'ru':
+        return 'Этот чек уже добавил(а) $scanner ($store).';
+      default:
+        return 'This receipt was already scanned by $scanner ($store).';
+    }
+  }
+
+  static String categoryName(String englishName, String locale) {
+    const keys = {
+      'Grocery': 'cat_grocery',
+      'Restaurant': 'cat_restaurant',
+      'Tobacco': 'cat_tobacco',
+      'Transport': 'cat_transport',
+      'Health': 'cat_health',
+      'Clothing': 'cat_clothing',
+      'Utilities': 'cat_utilities',
+      'Education': 'cat_education',
+      'Other': 'cat_other',
+      'Meat': 'cat_meat',
+      'Dairy': 'cat_dairy',
+      'Vegetables': 'cat_vegetables',
+      'Household': 'cat_household',
+    };
+    final key = keys[englishName];
+    if (key != null) return get(key, locale);
+    return englishName;
+  }
+
+  static String receiptsInPeriod(int count, int month, int year, String locale) {
+    switch (locale) {
+      case 'az':
+        return count == 1
+            ? 'Bu dövrdə 1 qəbz'
+            : 'Bu dövrdə $count qəbz';
+      case 'ru':
+        return count == 1
+            ? '1 чек за период'
+            : '$count чеков за период';
+      default:
+        return count == 1
+            ? '1 receipt in this period'
+            : '$count receipts in this period';
+    }
+  }
+
+  static String familyEmptyHint(String locale) {
+    switch (locale) {
+      case 'az':
+        return 'Ailə qəbzləri yoxdur. Paylaşmaq üçün qəbz saxlayarkən Ailə seçin.';
+      case 'ru':
+        return 'Нет семейных чеков. Сохраняйте чек как «Семья».';
+      default:
+        return 'No family receipts yet. Save a receipt as Family to share.';
+    }
+  }
+
+  static String periodFallbackNotice(int month, int year, String locale) {
+    final label = spentInMonth(month, year, locale);
+    switch (locale) {
+      case 'az':
+        return '${get('dash_period_fallback', locale)}: $label';
+      case 'ru':
+        return '${get('dash_period_fallback', locale)}: $label';
+      default:
+        return '${get('dash_period_fallback', locale)} $label';
+    }
+  }
+
   static String greeting(String name, String locale) {
     switch (locale) {
       case 'az': return 'Salam, $name!';
@@ -416,6 +801,30 @@ class AppStrings {
       case 'az': return '$m $year-da xərcləndi';
       case 'ru': return 'Потрачено в $m $year';
       default:   return 'Spent in $m $year';
+    }
+  }
+
+  static String monthName(int month, String locale) {
+    const en = ['','January','February','March','April','May','June','July','August','September','October','November','December'];
+    const az = ['','Yanvar','Fevral','Mart','Aprel','May','İyun','İyul','Avqust','Sentyabr','Oktyabr','Noyabr','Dekabr'];
+    const ru = ['','Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+    if (month < 1 || month > 12) return '';
+    switch (locale) {
+      case 'az': return az[month];
+      case 'ru': return ru[month];
+      default:   return en[month];
+    }
+  }
+
+  static String monthShortName(int month, String locale) {
+    const en = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const az = ['','Yan','Fev','Mar','Apr','May','İyn','İyl','Avq','Sen','Okt','Noy','Dek'];
+    const ru = ['','янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+    if (month < 1 || month > 12) return '';
+    switch (locale) {
+      case 'az': return az[month];
+      case 'ru': return ru[month];
+      default:   return en[month];
     }
   }
 
@@ -457,6 +866,90 @@ class AppStrings {
     }
   }
 
+  static List<String> upgradeFreeFeatures(String locale) {
+    switch (locale) {
+      case 'az':
+        return [
+          'Limitsiz qəbz skan',
+          'AI — son 7 günün məlumatı',
+          'Həftədə 1 AI sual',
+          'Əsas panel',
+          'Yenidən alış xatırlatmaları',
+        ];
+      case 'ru':
+        return [
+          'Безлимитное сканирование чеков',
+          'AI — данные за 7 дней',
+          '1 AI-вопрос в неделю',
+          'Базовая панель',
+          'Напоминания о покупках',
+        ];
+      default:
+        return [
+          'Unlimited receipt scanning',
+          'AI chat — last 7 days data',
+          '1 AI question per week',
+          'Basic dashboard',
+          'Restock reminders',
+        ];
+    }
+  }
+
+  static List<String> upgradeAiPremiumFeatures(String locale) {
+    switch (locale) {
+      case 'az':
+        return [
+          'Limitsiz qəbz skan',
+          'Limitsiz AI suallar',
+          'Qiymət anomaliyası xəbərdarlıqları',
+          'PDF ixrac',
+          'Prioritet dəstək',
+        ];
+      case 'ru':
+        return [
+          'Безлимитное сканирование',
+          'Безлимитные AI-вопросы',
+          'Оповещения о ценах',
+          'Экспорт в PDF',
+          'Приоритетная поддержка',
+        ];
+      default:
+        return [
+          'Unlimited receipt scanning',
+          'Unlimited AI questions',
+          'Price anomaly alerts',
+          'Export to PDF',
+          'Priority support',
+        ];
+    }
+  }
+
+  static List<String> upgradeFamilyFeatures(String locale) {
+    switch (locale) {
+      case 'az':
+        return [
+          'AI Premium-dakı hər şey',
+          '6 ailə üzvünə qədər',
+          'Ortaq büdcə izləmə',
+          'Ailə xərc analitikası',
+        ];
+      case 'ru':
+        return [
+          'Всё из AI Premium',
+          'До 6 членов семьи',
+          'Общий бюджет',
+          'Семейная аналитика',
+        ];
+      default:
+        return [
+          'Everything in AI Premium',
+          'Up to 6 family members',
+          'Shared budget tracking',
+          'Family spending insights',
+        ];
+    }
+  }
+
   static String aiGreeting(String locale) {
     switch (locale) {
       case 'az':
@@ -465,6 +958,57 @@ class AppStrings {
         return 'Привет! Я ваш AI-ассистент Balanzo. Спросите меня всё о ваших расходах.';
       default:
         return "Hi! I'm your Balanzo AI assistant. Ask me anything about your spending.";
+    }
+  }
+
+  static String aiUpgradeLimitReached(String locale) {
+    switch (locale) {
+      case 'az':
+        return 'Pulsuz plan: həftədə 1 mesaj. Limitsiz AI üçün yüksəldin.';
+      case 'ru':
+        return 'Бесплатно: 1 сообщение в неделю. Оформите Premium для безлимита.';
+      default:
+        return 'Free tier: 1 message per week. Upgrade for unlimited AI.';
+    }
+  }
+
+  static String aiUpgradeBanner(int dataWindowDays, int freeLeft, String locale) {
+    switch (locale) {
+      case 'az':
+        return 'Son $dataWindowDays günün məlumatı · $freeLeft pulsuz mesaj qaldı';
+      case 'ru':
+        return 'Данные за $dataWindowDays дн. · осталось $freeLeft бесплатных сообщ.';
+      default:
+        final msgWord = freeLeft == 1 ? 'message' : 'messages';
+        return 'Last $dataWindowDays days of data · $freeLeft free $msgWord left';
+    }
+  }
+
+  static String productBuysThisPeriod(int buys, double totalQty, String locale) {
+    final qty = totalQty == totalQty.roundToDouble()
+        ? totalQty.toStringAsFixed(0)
+        : totalQty.toStringAsFixed(1);
+    switch (locale) {
+      case 'az':
+        return '$buys alış bu ay, cəmi $qty ${get('dash_qty_unit', locale)}';
+      case 'ru':
+        return '$buys покупок в этом месяце, всего $qty ${get('dash_qty_unit', locale)}';
+      default:
+        return '$buys buys this month, $qty ${get('dash_qty_unit', locale)} total';
+    }
+  }
+
+  static String productPeriodSummary(int buys, double totalQty, String locale) {
+    final qty = totalQty == totalQty.roundToDouble()
+        ? totalQty.toStringAsFixed(0)
+        : totalQty.toStringAsFixed(1);
+    switch (locale) {
+      case 'az':
+        return '$buys alış, cəmi $qty ${get('dash_qty_unit', locale)}';
+      case 'ru':
+        return '$buys покупок, всего $qty ${get('dash_qty_unit', locale)}';
+      default:
+        return '$buys buys, $qty ${get('dash_qty_unit', locale)} total';
     }
   }
 }

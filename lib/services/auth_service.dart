@@ -5,10 +5,17 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthService {
   static final _supabase = Supabase.instance.client;
+
+  static const _webClientId =
+      '613777273688-s5to8t2nvu7v6d9stb2sjdlvfffj2vdu.apps.googleusercontent.com';
+  static const _iosClientId =
+      '613777273688-kme6idfejdql19v0r9kcfk2elvqe9tac.apps.googleusercontent.com';
+
   static final _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
-    serverClientId:
-        '613777273688-s5to8t2nvu7v6d9stb2sjdlvfffj2vdu.apps.googleusercontent.com',
+    // iOS requires its own OAuth client ID; Android uses serverClientId only.
+    clientId: defaultTargetPlatform == TargetPlatform.iOS ? _iosClientId : null,
+    serverClientId: _webClientId,
   );
 
   static Future<AuthResponse> signInWithGoogle() async {
@@ -44,18 +51,41 @@ class AuthService {
   }
 
   static Future<AuthResponse> signInWithApple() async {
-    final credential = await SignInWithApple.getAppleIDCredential(
-      scopes: [
-        AppleIDAuthorizationScopes.email,
-        AppleIDAuthorizationScopes.fullName,
-      ],
-    );
-    final idToken = credential.identityToken;
-    if (idToken == null) throw Exception('No identity token from Apple.');
-    return await _supabase.auth.signInWithIdToken(
-      provider: OAuthProvider.apple,
-      idToken: idToken,
-    );
+    if (!await SignInWithApple.isAvailable()) {
+      throw Exception('Sign in with Apple is not available on this device.');
+    }
+    try {
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+      );
+      final idToken = credential.identityToken;
+      if (idToken == null) throw Exception('No identity token from Apple.');
+      return await _supabase.auth.signInWithIdToken(
+        provider: OAuthProvider.apple,
+        idToken: idToken,
+      );
+    } on SignInWithAppleAuthorizationException catch (e) {
+      debugPrint('[Auth] Apple authorization: ${e.code} — ${e.message}');
+      if (e.code == AuthorizationErrorCode.unknown) {
+        throw Exception(
+          'Apple Sign-In is not enabled for this app yet. '
+          'Enable it for com.mycompany.balanzo in Apple Developer, then rebuild.',
+        );
+      }
+      if (e.code == AuthorizationErrorCode.canceled) {
+        throw Exception('Sign-in cancelled.');
+      }
+      rethrow;
+    } on AuthException catch (e) {
+      debugPrint('[Auth] Supabase Apple sign-in: ${e.message} (${e.statusCode})');
+      rethrow;
+    } catch (e, st) {
+      debugPrint('[Auth] Apple sign-in failed: $e\n$st');
+      rethrow;
+    }
   }
 
   /// Saves profile row; failures are logged but must not block sign-in.

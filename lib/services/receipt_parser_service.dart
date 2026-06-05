@@ -8,9 +8,18 @@ import 'structured_receipt_parser.dart';
 class ReceiptParserService {
   static const _endpoint = 'https://api.anthropic.com/v1/messages';
 
+  static bool get isAvailable => AnthropicConfig.apiKey.trim().isNotEmpty;
+
   static Future<Receipt> parse(String ocrText) async {
     final local = StructuredReceiptParser.tryParse(ocrText);
     if (local != null) return local.withCorrectedTotals();
+
+    if (!isAvailable) {
+      throw Exception(
+        'Could not parse this receipt on device. '
+        'Try a clearer photo, scan the e-kassa QR, or enter items manually.',
+      );
+    }
 
     try {
       final response = await http.post(
@@ -74,7 +83,6 @@ class ReceiptParserService {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final content = (data['content'] as List).first['text'] as String;
 
-      // Strip markdown code fences if present
       final json = content
           .replaceAll(RegExp(r'^```json\s*', multiLine: true), '')
           .replaceAll(RegExp(r'^```\s*', multiLine: true), '')

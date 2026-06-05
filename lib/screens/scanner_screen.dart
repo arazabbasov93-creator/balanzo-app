@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../services/ocr_service.dart';
 import '../services/ekassa_service.dart';
 import 'receipt_result_sheet.dart';
@@ -52,6 +55,11 @@ class _ScannerScreenState extends State<ScannerScreen>
   }
 
   Future<void> _initCamera() async {
+    if (Platform.isAndroid) {
+      final status = await Permission.camera.request();
+      if (!status.isGranted) return;
+    }
+
     final cameras = await availableCameras();
     if (cameras.isEmpty || !mounted) return;
 
