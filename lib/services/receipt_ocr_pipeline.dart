@@ -4,8 +4,10 @@ import '../models/receipt.dart';
 import 'category_assignment_service.dart';
 import 'category_service.dart';
 import 'ekassa_service.dart';
+import 'notification_service.dart';
 import 'ocr_service.dart';
 import 'receipt_parser_service.dart';
+import 'receipt_service.dart';
 import 'structured_receipt_parser.dart';
 
 /// Single entry point for OCR → structured receipt parsing.
@@ -48,6 +50,17 @@ class ReceiptOcrPipeline {
             lower.contains('quantity price total'));
   }
 
+  static Receipt? _tryStructuredParse(String ocrText) {
+    var parsed =
+        StructuredReceiptParser.tryParse(ocrText)?.withCorrectedTotals();
+    if (parsed == null || parsed.items.isEmpty) {
+      parsed = StructuredReceiptParser.tryParseHeaderOnly(ocrText)
+          ?.withCorrectedTotals();
+    }
+    if (parsed == null || parsed.items.isEmpty) return null;
+    return parsed;
+  }
+
   /// Parse structured OCR text into a [Receipt].
   ///
   /// [documentId] — known fiscal ID (QR/API fetch). When omitted, extracted from OCR.
@@ -62,17 +75,21 @@ class ReceiptOcrPipeline {
       throw Exception('Could not read text from receipt image.');
     }
 
-    var parsed =
-        StructuredReceiptParser.tryParse(ocrText)?.withCorrectedTotals();
+    Receipt? parsed;
 
-    if (parsed == null || parsed.items.isEmpty) {
-      parsed = StructuredReceiptParser.tryParseHeaderOnly(ocrText)
-          ?.withCorrectedTotals();
+    // PIPELINE: AI is primary (global, handles any language/format).
+    // StructuredReceiptParser is fallback (AZ e-kassa format, zero cost).
+    // Do not reverse this order.
+    if (ReceiptParserService.isAvailable) {
+      try {
+        parsed = (await ReceiptParserService.parse(ocrText)).withCorrectedTotals();
+        if (parsed.items.isEmpty) parsed = null;
+      } catch (_) {
+        parsed = null;
+      }
     }
 
-    if ((parsed == null || parsed.items.isEmpty) && ReceiptParserService.isAvailable) {
-      parsed = (await ReceiptParserService.parse(ocrText)).withCorrectedTotals();
-    }
+    parsed ??= _tryStructuredParse(ocrText);
 
     if (parsed == null) {
       throw Exception(
@@ -90,7 +107,7 @@ class ReceiptOcrPipeline {
 
     final docId = documentId ?? extractFiscalId(ocrText);
 
-    final receipt = Receipt(
+    var receipt = Receipt(
       store: parsed.store,
       date: parsed.date,
       items: parsed.items,
@@ -110,8 +127,36 @@ class ReceiptOcrPipeline {
       );
     }
 
-    final categories = await CategoryService.fetchAll();
-    return CategoryAssignmentService.assignReceipt(receipt, categories);
+    final needsCategory = receipt.items.any((i) => i.categoryId == null);
+    if (needsCategory && CategoryService.cached.isNotEmpty) {
+      receipt = await CategoryAssignmentService.assignReceipt(
+        receipt,
+        CategoryService.cached,
+      );
+    } else if (needsCategory) {
+      final categories = await CategoryService.fetchAll();
+      receipt = await CategoryAssignmentService.assignReceipt(
+        receipt,
+        categories,
+      );
+    }
+
+    await _checkPriceAnomalies(receipt);
+
+    return receipt;
+  }
+
+  static Future<void> _checkPriceAnomalies(Receipt receipt) async {
+    for (final item in receipt.items) {
+      final name = item.name.trim();
+      if (name.isEmpty || item.unitPrice <= 0) continue;
+      final lastPrice = await ReceiptService.findLastUnitPriceForProduct(name);
+      if (lastPrice == null || lastPrice <= 0) continue;
+      if (item.unitPrice > lastPrice * 1.15) {
+        final pctAbove = ((item.unitPrice - lastPrice) / lastPrice) * 100;
+        await NotificationService.sendPriceAnomaly(name, pctAbove);
+      }
+    }
   }
 
   /// Logs when item sum is below receipt total; does not block save sheet.

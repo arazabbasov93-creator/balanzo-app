@@ -3,6 +3,7 @@ import '../app_state.dart';
 import '../l10n/app_strings.dart';
 import '../services/auth_service.dart';
 import '../services/family_service.dart';
+import '../services/category_service.dart';
 import '../services/home_data_cache.dart';
 import '../services/user_profile_service.dart';
 import '../widgets/add_receipt_sheet.dart';
@@ -110,6 +111,7 @@ class _HomeTabState extends State<_HomeTab> with SingleTickerProviderStateMixin 
     super.initState();
     UserProfileService.warmCache();
     UserProfileService.loadFullName();
+    CategoryService.refreshCache();
     HomeDataCache.ensureRows(false);
     final now = DateTime.now();
     _periodMonth = now.month;
@@ -217,7 +219,7 @@ class _HomeTabState extends State<_HomeTab> with SingleTickerProviderStateMixin 
                   ),
                   ValueListenableBuilder<String?>(
                     valueListenable: cachedDisplayName,
-                    builder: (_, cached, __) => HomeGreetingCard(
+                    builder: (context, cached, _) => HomeGreetingCard(
                       identity: identity,
                       insights: header.insights,
                       incomeTotal: header.incomeTotal,

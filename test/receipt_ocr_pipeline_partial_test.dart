@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:balanzo/services/receipt_ocr_pipeline.dart';
-import 'package:balanzo/models/receipt.dart';
 
 void main() {
   test('partial e-kassa parse is allowed (no throw)', () async {

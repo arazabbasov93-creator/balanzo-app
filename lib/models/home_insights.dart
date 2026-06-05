@@ -140,6 +140,8 @@ class HomeInsights {
   final int periodYear;
   final int totalReceiptsInScope;
   final bool usingFallbackPeriod;
+  final bool showWeekComparison;
+  final int receiptsLastMonth;
   final bool familyMode;
 
   const HomeInsights({
@@ -171,6 +173,8 @@ class HomeInsights {
     required this.periodYear,
     required this.totalReceiptsInScope,
     this.usingFallbackPeriod = false,
+    this.showWeekComparison = true,
+    this.receiptsLastMonth = 0,
     this.familyMode = false,
   });
 

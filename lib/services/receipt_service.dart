@@ -14,6 +14,46 @@ class ReceiptService {
 
   static String? get _userId => _db.auth.currentUser?.id;
 
+  /// Last known unit price for [productName] across the user's saved receipts.
+  static Future<double?> findLastUnitPriceForProduct(String productName) async {
+    final userId = _userId;
+    if (userId == null) return null;
+    final needle = productName.trim().toLowerCase();
+    if (needle.isEmpty) return null;
+    try {
+      final receipts = await _db
+          .from('receipts')
+          .select('id, purchase_date')
+          .eq('user_id', userId)
+          .order('purchase_date', ascending: false)
+          .limit(100);
+      final rows = (receipts as List).cast<Map<String, dynamic>>();
+      if (rows.isEmpty) return null;
+      final dateById = {
+        for (final r in rows)
+          r['id'] as String: r['purchase_date']?.toString() ?? '',
+      };
+      final ids = dateById.keys.toList();
+      final items = await fetchItemsForReceipts(ids);
+      items.sort((a, b) {
+        final da = dateById[a['purchase_id'] as String? ?? ''] ?? '';
+        final db = dateById[b['purchase_id'] as String? ?? ''] ?? '';
+        return db.compareTo(da);
+      });
+      for (final row in items) {
+        final name = (row['product_name'] as String? ??
+                row['name_raw'] as String? ??
+                '')
+            .trim()
+            .toLowerCase();
+        if (name != needle) continue;
+        final price = (row['unit_price'] as num?)?.toDouble() ?? 0;
+        if (price > 0) return price;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   /// DB requires purchase_date — caller must supply it (user picks on save sheet).
   static String _purchaseDateString(DateTime? date) {
     if (date == null) {
@@ -78,7 +118,7 @@ class ReceiptService {
     }
 
     final cats = categories ?? await CategoryService.fetchAll();
-    final corrected = CategoryAssignmentService.assignReceipt(
+    final corrected = await CategoryAssignmentService.assignReceipt(
       receipt.withCorrectedTotals(),
       cats,
     );
@@ -193,7 +233,7 @@ class ReceiptService {
 
     final cats = await CategoryService.fetchAll();
     final fetched = await EkassaService.fetchAndParse(fiscalId);
-    final parsed = CategoryAssignmentService.assignReceipt(fetched, cats);
+    final parsed = await CategoryAssignmentService.assignReceipt(fetched, cats);
     final oldItems =
         ((row['receipt_items'] as List?) ?? []).cast<Map<String, dynamic>>();
 
@@ -433,8 +473,8 @@ class ReceiptService {
           .inFilter('user_id', memberIds.toList())
           .limit(1);
 
-      if ((rows as List).isEmpty) return null;
-      final row = rows.first as Map<String, dynamic>;
+      if (rows.isEmpty) return null;
+      final row = rows.first;
       final owner = row['users'] as Map<String, dynamic>?;
       final label = (owner?['full_name'] as String?)?.trim() ??
           (owner?['phone'] as String?) ??
@@ -537,8 +577,7 @@ class ReceiptService {
       lastError = e;
     }
 
-    if (lastError != null &&
-        !isMissingColumnError(lastError, 'category_id') &&
+    if (!isMissingColumnError(lastError, 'category_id') &&
         !isMissingColumnError(lastError, 'category') &&
         !lastError.toString().contains('receipt_id')) {
       // Embedded fetch handled by caller.

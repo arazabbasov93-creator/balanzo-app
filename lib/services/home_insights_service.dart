@@ -54,6 +54,11 @@ class HomeInsightsService {
         ? await ReceiptService.fetchFamily()
         : await ReceiptService.fetchPersonal();
     final categories = await CategoryService.fetchAll();
+    final resolved = resolveAnalysisPeriod(
+      rows,
+      DateTime(periodYear, periodMonth),
+    );
+    final usingFallback = resolved.fallback;
     final periodReceiptIds = _periodReceiptIds(rows, periodMonth, periodYear);
     final periodItems = await _fetchPeriodItems(periodReceiptIds);
     final fullName = await UserProfileService.loadFullName(refreshCache: false);
@@ -67,6 +72,7 @@ class HomeInsightsService {
       fullName: fullName,
       itemsScopedToPeriod: true,
       familyMode: familyMode,
+      usingFallbackPeriod: usingFallback,
     );
   }
 
@@ -98,11 +104,17 @@ class HomeInsightsService {
     String? fullName,
     bool itemsScopedToPeriod = false,
     bool familyMode = false,
+    bool usingFallbackPeriod = false,
   }) {
+    final now = DateTime.now();
+    final showWeekComparison =
+        periodYear == now.year && periodMonth == now.month;
+
     double periodTotal = 0;
     double prevPeriodTotal = 0;
     double periodVat = 0;
     int receiptsInPeriod = 0;
+    int receiptsLastMonth = 0;
     int receiptsThisWeek = 0;
     final storeTotals = <String, double>{};
     final storeVisits = <String, int>{};
@@ -113,8 +125,11 @@ class HomeInsightsService {
     final prevYear = periodMonth == 1 ? periodYear - 1 : periodYear;
     final lastYearMonth = periodYear - 1;
 
-    final thisWeekStart = DateTime.now().subtract(
-      Duration(days: DateTime.now().weekday - 1),
+    final weekAnchor = showWeekComparison
+        ? now
+        : DateTime(periodYear, periodMonth, 1);
+    final thisWeekStart = weekAnchor.subtract(
+      Duration(days: weekAnchor.weekday - 1),
     );
     final thisWeekStartDate =
         DateTime(thisWeekStart.year, thisWeekStart.month, thisWeekStart.day);
@@ -158,18 +173,21 @@ class HomeInsightsService {
           }
         } else if (inPrevPeriod) {
           prevPeriodTotal += total;
+          receiptsLastMonth++;
         }
 
         if (inLastYearSameMonth) {
           lastYearSameMonthTotal += total;
         }
 
-        if (!day.isBefore(thisWeekStartDate)) {
-          receiptsThisWeek++;
-          thisWeekSpend += total;
-        } else if (!day.isBefore(lastWeekStartDate) &&
-            !day.isAfter(lastWeekEndDate)) {
-          lastWeekSpend += total;
+        if (showWeekComparison && inPeriod) {
+          if (!day.isBefore(thisWeekStartDate)) {
+            receiptsThisWeek++;
+            thisWeekSpend += total;
+          } else if (!day.isBefore(lastWeekStartDate) &&
+              !day.isAfter(lastWeekEndDate)) {
+            lastWeekSpend += total;
+          }
         }
       }
     }
@@ -263,7 +281,9 @@ class HomeInsightsService {
       periodMonth: periodMonth,
       periodYear: periodYear,
       totalReceiptsInScope: rows.length,
-      usingFallbackPeriod: false,
+      usingFallbackPeriod: usingFallbackPeriod,
+      showWeekComparison: showWeekComparison,
+      receiptsLastMonth: receiptsLastMonth,
       familyMode: familyMode,
     );
   }

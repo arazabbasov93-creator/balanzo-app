@@ -116,7 +116,20 @@ class HomeDataCache {
       locale: locale,
       fullName: fullName,
       familyMode: familyMode,
+      usingFallbackPeriod: _usingFallback(rows, periodMonth, periodYear),
     );
+  }
+
+  static bool _usingFallback(
+    List<Map<String, dynamic>> rows,
+    int periodMonth,
+    int periodYear,
+  ) {
+    final resolved =
+        HomeInsightsService.resolveAnalysisPeriod(rows, DateTime.now());
+    return resolved.fallback &&
+        periodMonth == resolved.month &&
+        periodYear == resolved.year;
   }
 
   static Future<HomeInsights> loadInsights({
@@ -139,6 +152,7 @@ class HomeDataCache {
       locale: locale,
       fullName: fullName,
       familyMode: familyMode,
+      usingFallbackPeriod: _usingFallback(rows, periodMonth, periodYear),
     );
   }
 

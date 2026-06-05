@@ -34,12 +34,12 @@ class _ReceiptCaptureScreenState extends State<ReceiptCaptureScreen>
 
   static const _maxPhotos = 10;
 
-  static const _photoHints = [
-    'Start at the top of the receipt',
-    'Overlap slightly — capture the middle',
-    'Capture the bottom of the receipt',
-    'Add more sections or tap Process.',
-  ];
+  List<String> get _photoHints => [
+        AppStrings.get('photo_hint_top', currentLanguage.value),
+        AppStrings.get('photo_hint_middle', currentLanguage.value),
+        AppStrings.get('photo_hint_bottom', currentLanguage.value),
+        AppStrings.get('photo_hint_more', currentLanguage.value),
+      ];
 
   @override
   void initState() {

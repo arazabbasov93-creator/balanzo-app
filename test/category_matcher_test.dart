@@ -65,7 +65,7 @@ void main() {
   });
 
   group('CategoryAssignmentService', () {
-    test('assigns categories to all items from store and product names', () {
+    test('assigns categories to all items from store and product names', () async {
       const receipt = Receipt(
         store: 'MƏHƏLLƏ MARKET',
         items: [
@@ -76,12 +76,12 @@ void main() {
         vat: 0,
         total: 2.29,
       );
-      final assigned = CategoryAssignmentService.assignReceipt(receipt, _cats);
+      final assigned = await CategoryAssignmentService.assignReceipt(receipt, _cats);
       expect(assigned.items.every((i) => i.categoryId != null), isTrue);
       expect(assigned.items.first.categoryId, 'g1');
     });
 
-    test('preserves existing category ids', () {
+    test('preserves existing category ids', () async {
       const receipt = Receipt(
         items: [
           ReceiptItem(
@@ -96,7 +96,7 @@ void main() {
         vat: 0,
         total: 1,
       );
-      final assigned = CategoryAssignmentService.assignReceipt(receipt, _cats);
+      final assigned = await CategoryAssignmentService.assignReceipt(receipt, _cats);
       expect(assigned.items.first.categoryId, 'h1');
     });
   });

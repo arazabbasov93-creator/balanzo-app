@@ -16,7 +16,10 @@ class _ShareScreenState extends State<ShareScreen> {
   final _controller = ScreenshotController();
   int _selectedCard = 0;
   double _totalSpend = 0;
-  double _totalVat = 0;
+  // VAT TRACKER: Hidden — requires government ƏDV
+  // API integration. Do not delete.
+  // Re-enable when API is available.
+  // double _totalVat = 0;
   int _receiptCount = 0;
   bool _loading = true;
 
@@ -31,20 +34,17 @@ class _ShareScreenState extends State<ShareScreen> {
       final rows = await ReceiptService.monthlySummary();
       final now = DateTime.now();
       double spend = 0;
-      double vat = 0;
       int count = 0;
       for (final r in rows) {
         final dateStr = r['date'] as String?;
         final date = dateStr != null ? DateTime.tryParse(dateStr) : null;
         if (date != null && date.year == now.year && date.month == now.month) {
           spend += (r['total'] as num?)?.toDouble() ?? 0;
-          vat += (r['vat'] as num?)?.toDouble() ?? 0;
           count++;
         }
       }
       setState(() {
         _totalSpend = spend;
-        _totalVat = vat;
         _receiptCount = count;
         _loading = false;
       });
@@ -87,9 +87,12 @@ class _ShareScreenState extends State<ShareScreen> {
                     children: [
                       _Chip(label: 'Monthly Spend', selected: _selectedCard == 0, onTap: () => setState(() => _selectedCard = 0)),
                       const SizedBox(width: 8),
-                      _Chip(label: 'VAT Savings', selected: _selectedCard == 1, onTap: () => setState(() => _selectedCard = 1)),
-                      const SizedBox(width: 8),
-                      _Chip(label: 'Inflation Impact', selected: _selectedCard == 2, onTap: () => setState(() => _selectedCard = 2)),
+                      // VAT TRACKER: Hidden — requires government ƏDV
+                      // API integration. Do not delete.
+                      // Re-enable when API is available.
+                      // _Chip(label: 'VAT Savings', selected: _selectedCard == 1, onTap: () => setState(() => _selectedCard = 1)),
+                      // const SizedBox(width: 8),
+                      _Chip(label: 'Inflation Impact', selected: _selectedCard == 1, onTap: () => setState(() => _selectedCard = 1)),
                     ],
                   ),
                 ),
@@ -130,9 +133,12 @@ class _ShareScreenState extends State<ShareScreen> {
 
   Widget _buildCard() {
     switch (_selectedCard) {
+      // VAT TRACKER: Hidden — requires government ƏDV
+      // API integration. Do not delete.
+      // Re-enable when API is available.
+      // case 1:
+      //   return _VatCard(vatAmount: _totalVat);
       case 1:
-        return _VatCard(vatAmount: _totalVat);
-      case 2:
         return _InflationCard(receiptCount: _receiptCount, totalSpend: _totalSpend);
       default:
         return _MonthlySpendCard(total: _totalSpend, receiptCount: _receiptCount);
@@ -224,7 +230,11 @@ class _MonthlySpendCard extends StatelessWidget {
   }
 }
 
+// VAT TRACKER: Hidden — requires government ƏDV
+// API integration. Do not delete.
+// Re-enable when API is available.
 // T106: VAT Savings Card
+/*
 class _VatCard extends StatelessWidget {
   final double vatAmount;
   const _VatCard({required this.vatAmount});
@@ -275,6 +285,7 @@ class _VatCard extends StatelessWidget {
     );
   }
 }
+*/
 
 // T104: Inflation Impact Card
 class _InflationCard extends StatelessWidget {

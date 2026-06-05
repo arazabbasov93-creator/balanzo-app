@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../app_state.dart';
 import '../../l10n/app_strings.dart';
 import '../../models/budget.dart';
@@ -75,6 +76,7 @@ class _HomeScopePageState extends State<HomeScopePage>
   HomeScopeData? _cached;
   bool _itemsLoading = false;
   bool _startedLoad = false;
+  bool _monthlySummaryChecked = false;
   HomeHeaderSnapshot? _lastHeaderPublished;
 
   @override
@@ -134,15 +136,16 @@ class _HomeScopePageState extends State<HomeScopePage>
       setState(() {
         _cached = (
           insights: instant,
-          budgets: _cached?.budgets ?? [],
-          budgetAlerts: _cached?.budgetAlerts ?? [],
+          budgets: const [],
+          budgetAlerts: const [],
           noFamily: _cached?.noFamily ?? false,
-          incomeEntries: _cached?.incomeEntries ?? [],
-          incomeTotal: _cached?.incomeTotal ?? 0,
+          incomeEntries: const [],
+          incomeTotal: 0,
           familyMembers: _cached?.familyMembers,
           family: _cached?.family,
         ) as HomeScopeData;
       });
+      _publishHeader(_cached, instant);
     }
     final pack = await _loadAuxiliary(
       month: widget.periodMonth,
@@ -150,7 +153,32 @@ class _HomeScopePageState extends State<HomeScopePage>
       familyMode: familyMode,
       insights: instant,
     );
-    if (mounted) setState(() => _cached = pack);
+    if (mounted) {
+      setState(() => _cached = pack);
+      _maybeSendMonthlySummary(pack);
+    }
+  }
+
+  Future<void> _maybeSendMonthlySummary(HomeScopeData pack) async {
+    if (_monthlySummaryChecked || widget.scopeIndex != 0) return;
+    _monthlySummaryChecked = true;
+    final insights = pack.insights;
+    if (insights == null) return;
+    final now = DateTime.now();
+    if (widget.periodMonth != now.month || widget.periodYear != now.year) {
+      return;
+    }
+    final prevMonth = now.month == 1 ? 12 : now.month - 1;
+    final prevYear = now.month == 1 ? now.year - 1 : now.year;
+    final key = '$prevYear-${prevMonth.toString().padLeft(2, '0')}';
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getString('last_monthly_summary_sent') == key) return;
+    if (insights.lastMonthTotal <= 0 && insights.receiptsLastMonth <= 0) return;
+    await NotificationService.sendMonthlySummary(
+      total: insights.lastMonthTotal,
+      receiptCount: insights.receiptsLastMonth,
+    );
+    await prefs.setString('last_monthly_summary_sent', key);
   }
 
   @override
@@ -241,12 +269,14 @@ class _HomeScopePageState extends State<HomeScopePage>
 
     if (mounted) setState(() => _itemsLoading = false);
 
-    return _loadAuxiliary(
+    final pack = await _loadAuxiliary(
       month: month,
       year: year,
       familyMode: familyMode,
       insights: insights,
     );
+    if (mounted) _maybeSendMonthlySummary(pack);
+    return pack;
   }
 
   Future<HomeScopeData> _loadAuxiliary({

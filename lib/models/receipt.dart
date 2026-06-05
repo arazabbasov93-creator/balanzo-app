@@ -4,6 +4,7 @@ class ReceiptItem {
   final double unitPrice;
   final double totalPrice;
   final String? categoryId;
+  final String? categoryName;
 
   const ReceiptItem({
     required this.name,
@@ -11,6 +12,7 @@ class ReceiptItem {
     required this.unitPrice,
     required this.totalPrice,
     this.categoryId,
+    this.categoryName,
   });
 
   factory ReceiptItem.fromJson(Map<String, dynamic> json) => ReceiptItem(
@@ -19,6 +21,7 @@ class ReceiptItem {
         unitPrice: (json['unit_price'] as num?)?.toDouble() ?? 0.0,
         totalPrice: (json['total_price'] as num?)?.toDouble() ?? 0.0,
         categoryId: json['category_id'] as String?,
+        categoryName: json['category'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -35,6 +38,7 @@ class ReceiptItem {
     double? unitPrice,
     double? totalPrice,
     String? categoryId,
+    String? categoryName,
   }) =>
       ReceiptItem(
         name: name ?? this.name,
@@ -42,6 +46,7 @@ class ReceiptItem {
         unitPrice: unitPrice ?? this.unitPrice,
         totalPrice: totalPrice ?? this.totalPrice,
         categoryId: categoryId ?? this.categoryId,
+        categoryName: categoryName ?? this.categoryName,
       );
 }
 

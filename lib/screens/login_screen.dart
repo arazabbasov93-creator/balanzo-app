@@ -3,8 +3,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../app_state.dart';
+import '../l10n/app_strings.dart';
 import '../services/analytics_service.dart';
 import '../services/auth_service.dart';
+import '../services/category_service.dart';
 import '../services/crash_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -28,6 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final user = response.user;
       if (user != null) {
         await AuthService.upsertUser(user);
+        await CategoryService.refreshCache();
         await CrashService.setUser();
         final createdAt = user.createdAt;
         final isNew = createdAt.isNotEmpty &&
@@ -54,6 +58,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final user = response.user;
       if (user != null) {
         await AuthService.upsertUser(user);
+        await CategoryService.refreshCache();
         await CrashService.setUser();
         final createdAt = user.createdAt;
         final isNew = createdAt.isNotEmpty &&
@@ -85,28 +90,30 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   String _friendlyError(Object e) {
+    final lang = currentLanguage.value;
     if (e is AuthException) {
       final code = e.statusCode;
       if (code == '401' || code == '400') {
-        return 'Sign-in rejected by server. Check provider settings in Supabase Auth.';
+        return AppStrings.get('sign_in_rejected', lang);
       }
       return e.message;
     }
     final msg = e.toString();
     if (msg.contains('cancelled') || msg.contains('canceled')) {
-      return 'Sign-in cancelled.';
+      return AppStrings.get('sign_in_cancelled', lang);
     }
     if (msg.contains('ApiException: 10') || msg.contains('DEVELOPER_ERROR')) {
-      return 'Google Sign-In not configured for this app build (SHA-1 / Firebase).';
+      return AppStrings.get('sign_in_google_config', lang);
     }
     if (msg.contains('network') || msg.contains('SocketException')) {
-      return 'Cannot reach server. Check Wi‑Fi/mobile data and try again.';
+      return AppStrings.get('sign_in_network', lang);
     }
     return msg.replaceFirst('Exception: ', '');
   }
 
   @override
   Widget build(BuildContext context) {
+    final lang = currentLanguage.value;
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -116,12 +123,12 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 48),
-              _buildLogo(),
+              _buildLogo(lang),
               const SizedBox(height: 64),
-              const Text(
-                'Sign in or create account',
+              Text(
+                AppStrings.get('sign_in_title', lang),
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
                   color: Colors.black87,
@@ -129,7 +136,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Choose your preferred sign-in method',
+                AppStrings.get('sign_in_subtitle', lang),
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
               ),
@@ -138,6 +145,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 loading: _googleLoading,
                 disabled: _appleLoading,
                 onPressed: _signInWithGoogle,
+                label: AppStrings.get('continue_with_google', lang),
               ),
               if (Platform.isIOS) ...[
                 const SizedBox(height: 16),
@@ -145,11 +153,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   loading: _appleLoading,
                   disabled: _googleLoading,
                   onPressed: _signInWithApple,
+                  label: AppStrings.get('continue_with_apple', lang),
                 ),
               ],
               const SizedBox(height: 32),
               Text(
-                'By continuing, you agree to our Terms of Service and Privacy Policy',
+                AppStrings.get('sign_in_terms', lang),
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
               ),
@@ -160,7 +169,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildLogo() {
+  Widget _buildLogo(String lang) {
     return Column(
       children: [
         Container(
@@ -177,9 +186,9 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        const Text(
+        Text(
           'Balanzo',
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 34,
             fontWeight: FontWeight.bold,
             color: Color(0xFF1B5E20),
@@ -188,7 +197,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(height: 6),
         Text(
-          'Family budget made simple',
+          AppStrings.get('app_tagline', lang),
           style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
         ),
       ],
@@ -200,11 +209,13 @@ class _GoogleButton extends StatelessWidget {
   final bool loading;
   final bool disabled;
   final VoidCallback onPressed;
+  final String label;
 
   const _GoogleButton({
     required this.loading,
     required this.onPressed,
     this.disabled = false,
+    required this.label,
   });
 
   @override
@@ -245,7 +256,7 @@ class _GoogleButton extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    'Continue with Google',
+                    label,
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
@@ -263,11 +274,13 @@ class _AppleButton extends StatelessWidget {
   final bool loading;
   final bool disabled;
   final VoidCallback onPressed;
+  final String label;
 
   const _AppleButton({
     required this.loading,
     required this.onPressed,
     this.disabled = false,
+    required this.label,
   });
 
   @override
@@ -301,9 +314,9 @@ class _AppleButton extends StatelessWidget {
                 children: [
                   const Icon(Icons.apple, size: 26, color: Colors.white),
                   const SizedBox(width: 10),
-                  const Text(
-                    'Continue with Apple',
-                    style: TextStyle(
+                  Text(
+                    label,
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
                       color: Colors.white,

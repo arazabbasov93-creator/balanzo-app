@@ -35,7 +35,10 @@ class HomeGreetingCard extends StatelessWidget {
       cachedName ?? insights?.fullName ?? identity,
       identity,
     );
-    final spend = insights?.thisMonthTotal ?? 0;
+    final periodMatches = insights != null &&
+        insights!.periodMonth == periodMonth &&
+        insights!.periodYear == periodYear;
+    final spend = periodMatches ? insights!.thisMonthTotal : 0;
     final remaining = incomeTotal - spend;
     final years = List.generate(5, (i) => DateTime.now().year - i);
 

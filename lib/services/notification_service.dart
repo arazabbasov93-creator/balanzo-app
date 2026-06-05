@@ -72,15 +72,18 @@ class NotificationService {
     );
   }
 
-  static Future<void> sendVatAlert(double vatAmount) async {
-    await _show(
-      id: 101,
-      title: 'Unclaimed VAT Alert',
-      body:
-          'You have ${vatAmount.toStringAsFixed(2)} AZN in unclaimed VAT this month.',
-      type: 'vat',
-    );
-  }
+  // VAT TRACKER: Hidden — requires government ƏDV
+  // API integration. Do not delete.
+  // Re-enable when API is available.
+  // static Future<void> sendVatAlert(double vatAmount) async {
+  //   await _show(
+  //     id: 101,
+  //     title: 'Unclaimed VAT Alert',
+  //     body:
+  //         'You have ${vatAmount.toStringAsFixed(2)} AZN in unclaimed VAT this month.',
+  //     type: 'vat',
+  //   );
+  // }
 
   static Future<void> sendMonthlySummary({
     required double total,

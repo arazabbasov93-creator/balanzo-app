@@ -1049,7 +1049,13 @@ class _TotalsSection extends StatelessWidget {
       children: [
         if (receipt.subtotal > 0 && receipt.subtotal != receipt.total)
           _TotalRow(label: 'Subtotal', value: receipt.subtotal, currency: receipt.currency),
+        // VAT TRACKER: Hidden — requires government ƏDV
+        // API integration. Do not delete.
+        // Re-enable when API is available.
         // HIDDEN: VAT tracker disabled — requires government DVX API (Phase 2). Do not delete.
+        // VAT TRACKER: Hidden — requires government ƏDV
+        // API integration. Do not delete.
+        // Re-enable when API is available.
         // if (receipt.vat > 0) _TotalRow(label: 'VAT', value: receipt.vat, currency: receipt.currency),
         _TotalRow(label: 'Total', value: receipt.total, currency: receipt.currency, bold: true),
       ],

@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config/anthropic_config.dart';
 import '../models/receipt.dart';
+import 'category_service.dart';
 import 'crash_service.dart';
-import 'structured_receipt_parser.dart';
 
 class ReceiptParserService {
   static const _endpoint = 'https://api.anthropic.com/v1/messages';
@@ -11,15 +11,21 @@ class ReceiptParserService {
   static bool get isAvailable => AnthropicConfig.apiKey.trim().isNotEmpty;
 
   static Future<Receipt> parse(String ocrText) async {
-    final local = StructuredReceiptParser.tryParse(ocrText);
-    if (local != null) return local.withCorrectedTotals();
-
     if (!isAvailable) {
       throw Exception(
         'Could not parse this receipt on device. '
         'Try a clearer photo, scan the e-kassa QR, or enter items manually.',
       );
     }
+
+    final cats = CategoryService.cached;
+    final categoryNames = cats.map((c) => c.name).toList();
+    final categoryList = categoryNames.isEmpty ? 'Other' : categoryNames.join(', ');
+    final categoryPrompt = categoryNames.isEmpty
+        ? ''
+        : 'For each item assign exactly one category from this list: [$categoryList]. '
+            'Use the category name exactly as written. Never return a category name outside this list. '
+            'Use Other only when no category can be reasonably inferred.\n';
 
     try {
       final response = await http.post(
@@ -48,7 +54,8 @@ class ReceiptParserService {
               '4. Return the date exactly as given -do not modify it\n'
               '5. Calculate subtotal as sum of all item total_price values\n'
               '6. If total provided, use it -otherwise sum items\n'
-              '7. If SERVICE_CHARGE is provided, use that exact value for service_charge field\n\n'
+              '7. If SERVICE_CHARGE is provided, use that exact value for service_charge field\n'
+              '8. $categoryPrompt\n\n'
               'Return only valid JSON, no explanation, no markdown:\n'
               '{\n'
               '  "store": "store name or null",\n'
@@ -58,7 +65,8 @@ class ReceiptParserService {
               '      "name": "cleaned item name",\n'
               '      "quantity": number,\n'
               '      "unit_price": number,\n'
-              '      "total_price": number\n'
+              '      "total_price": number,\n'
+              '      "category": "category name"\n'
               '    }\n'
               '  ],\n'
               '  "subtotal": number,\n'

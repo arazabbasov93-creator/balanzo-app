@@ -5,62 +5,79 @@ class CategoryService {
   static final _db = Supabase.instance.client;
   static String? get _userId => _db.auth.currentUser?.id;
 
-  /// In-memory catalog for UI when DB is unreachable (preview only).
-  static List<Category> localFallback() {
-    return defaultCategories.asMap().entries.map((e) {
-      final dc = e.value;
-      return Category(
-        id: 'local_${dc['name']}',
-        name: dc['name'] as String,
-        icon: dc['icon'] as String,
-        color: dc['color'] as int,
-        isDefault: true,
-      );
-    }).toList();
+  static List<Category> _cache = [];
+
+  static List<Category> get cached => List.unmodifiable(_cache);
+
+  static void clearCache() => _cache = [];
+
+  static Future<List<Category>> refreshCache() async {
+    try {
+      _cache = await _fetchFromDb();
+      if (_cache.isEmpty && _userId != null) {
+        _cache = await _fetchGlobals();
+      }
+    } catch (_) {
+      _cache = [];
+    }
+    return cached;
   }
 
   static Future<List<Category>> fetchAll() async {
-    try {
-      var list = await _fetchFromDb();
-      if (_userId != null) {
-        list = await _ensureDefaultCategoriesPresent(list);
-      }
-      return list.isNotEmpty ? list : localFallback();
-    } catch (_) {
-      return localFallback();
-    }
+    if (_cache.isNotEmpty) return cached;
+    return refreshCache();
   }
 
+  /// Fresh fetch for settings UI (always reloads cache).
+  static Future<List<Category>> fetchForSettings() => refreshCache();
+
   static Future<List<Category>> _fetchFromDb() async {
-    final rows = await _db.from('categories').select().order('name');
+    final userId = _userId;
+    if (userId == null) {
+      return _fetchGlobals();
+    }
+    final rows = await _db
+        .from('categories')
+        .select()
+        .or('user_id.eq.$userId,user_id.is.null')
+        .order('name');
     return (rows as List)
         .map((r) => Category.fromJson(r as Map<String, dynamic>))
         .toList();
   }
 
-  /// Creates missing default-named categories for the signed-in user.
-  /// Server defaults (is_default=true) are visible via RLS; if none exist,
-  /// user-owned copies are created (RLS allows insert with user_id).
-  static Future<List<Category>> _ensureDefaultCategoriesPresent(
-    List<Category> existing,
-  ) async {
-    final names = existing.map((c) => c.name.toLowerCase()).toSet();
-    var created = false;
-    for (final dc in defaultCategories) {
-      final name = dc['name'] as String;
-      if (names.contains(name.toLowerCase())) continue;
-      final cat = await create(
-        name,
-        dc['icon'] as String,
-        dc['color'] as int,
-      );
-      if (cat != null) created = true;
-    }
-    if (created) return _fetchFromDb();
-    return existing;
+  static Future<List<Category>> _fetchGlobals() async {
+    final rows = await _db
+        .from('categories')
+        .select()
+        .isFilter('user_id', null)
+        .order('name');
+    return (rows as List)
+        .map((r) => Category.fromJson(r as Map<String, dynamic>))
+        .toList();
   }
 
-  static Future<Category?> create(String name, String icon, int color) async {
+  static Future<Category?> findGlobalByName(String name) async {
+    try {
+      final row = await _db
+          .from('categories')
+          .select()
+          .isFilter('user_id', null)
+          .ilike('name', name)
+          .maybeSingle();
+      if (row == null) return null;
+      return Category.fromJson(row);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<Category?> create(
+    String name,
+    String icon,
+    int color, {
+    bool isDefault = false,
+  }) async {
     final userId = _userId;
     if (userId == null) return null;
     try {
@@ -71,11 +88,13 @@ class CategoryService {
             'name': name,
             'icon': icon,
             'color': color,
-            'is_default': false,
+            'is_default': isDefault,
           })
           .select()
           .single();
-      return Category.fromJson(row);
+      final cat = Category.fromJson(row);
+      _cache = [..._cache, cat]..sort((a, b) => a.name.compareTo(b.name));
+      return cat;
     } catch (_) {
       return null;
     }
@@ -84,6 +103,7 @@ class CategoryService {
   static Future<void> delete(String id) async {
     try {
       await _db.from('categories').delete().eq('id', id);
+      _cache = _cache.where((c) => c.id != id).toList();
     } catch (_) {}
   }
 }

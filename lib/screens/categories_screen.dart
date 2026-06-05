@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../app_state.dart';
+import '../l10n/app_strings.dart';
 import '../models/category.dart';
 import '../services/category_service.dart';
 import '../utils/icon_mapper.dart';
@@ -16,34 +18,40 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   @override
   void initState() {
     super.initState();
-    _future = CategoryService.fetchAll();
+    _future = CategoryService.fetchForSettings();
   }
 
-  void _refresh() => setState(() => _future = CategoryService.fetchAll());
+  void _refresh() {
+    setState(() => _future = CategoryService.fetchForSettings());
+  }
 
   Future<void> _addCategory() async {
+    final lang = currentLanguage.value;
     final nameCtrl = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('New Category'),
+        title: Text(AppStrings.get('new_category', lang)),
         content: TextField(
           controller: nameCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Category name',
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            labelText: AppStrings.get('category_name_label', lang),
+            border: const OutlineInputBorder(),
           ),
           autofocus: true,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(AppStrings.get('cancel', lang)),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF1B5E20),
               foregroundColor: Colors.white,
             ),
-            child: const Text('Add'),
+            child: Text(AppStrings.get('add_category', lang)),
           ),
         ],
       ),
@@ -53,11 +61,15 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     if (name.isEmpty) return;
     try {
       await CategoryService.create(name, 'category', 0xFF9E9E9E);
+      await CategoryService.refreshCache();
       if (mounted) _refresh();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red.shade700),
+          SnackBar(
+            content: Text('${AppStrings.get('error_generic', lang)}: $e'),
+            backgroundColor: Colors.red.shade700,
+          ),
         );
       }
     }
@@ -65,10 +77,11 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final lang = currentLanguage.value;
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
-        title: const Text('Categories'),
+        title: Text(AppStrings.get('categories', lang)),
         backgroundColor: const Color(0xFF1B5E20),
         foregroundColor: Colors.white,
         elevation: 0,
@@ -101,12 +114,18 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                     child: Icon(iconForName(cat.icon), color: Color(cat.color), size: 20),
                   ),
                   title: Text(cat.name),
-                  subtitle: cat.isDefault ? const Text('Default', style: TextStyle(fontSize: 11)) : null,
+                  subtitle: cat.isDefault
+                      ? Text(
+                          AppStrings.get('category_default', lang),
+                          style: const TextStyle(fontSize: 11),
+                        )
+                      : null,
                   trailing: !cat.isDefault
                       ? IconButton(
                           icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
                           onPressed: () async {
                             await CategoryService.delete(cat.id);
+                            await CategoryService.refreshCache();
                             _refresh();
                           },
                         )

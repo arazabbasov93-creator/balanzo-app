@@ -1,3 +1,11 @@
+// VAT TRACKER: Hidden — requires government ƏDV
+// API integration. Do not delete.
+// Re-enable when API is available.
+
+// VAT TRACKER: Hidden — requires government ƏDV
+// API integration. Do not delete.
+// Re-enable when API is available.
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../app_state.dart';

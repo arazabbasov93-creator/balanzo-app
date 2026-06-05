@@ -1,12 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/analytics_service.dart';
+import '../services/category_service.dart';
 import 'login_screen.dart';
 import 'dashboard_screen.dart';
 import 'receipt_capture_screen.dart';
 
-class AuthGateScreen extends StatelessWidget {
+class AuthGateScreen extends StatefulWidget {
   const AuthGateScreen({super.key});
+
+  @override
+  State<AuthGateScreen> createState() => _AuthGateScreenState();
+}
+
+class _AuthGateScreenState extends State<AuthGateScreen> {
+  @override
+  void initState() {
+    super.initState();
+    if (Supabase.instance.client.auth.currentSession != null) {
+      CategoryService.refreshCache();
+    }
+    Supabase.instance.client.auth.onAuthStateChange.listen((state) {
+      if (state.session != null) {
+        CategoryService.refreshCache();
+      } else {
+        CategoryService.clearCache();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

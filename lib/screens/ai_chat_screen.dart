@@ -7,6 +7,7 @@ import '../app_state.dart';
 import '../config/anthropic_config.dart';
 import '../l10n/app_strings.dart';
 import '../services/analytics_service.dart';
+import '../services/receipt_parser_service.dart';
 import '../services/subscription_service.dart';
 import 'upgrade_screen.dart';
 
@@ -293,6 +294,18 @@ class _AiChatScreenState extends State<AiChatScreen> {
     _scroll();
 
     try {
+      if (!ReceiptParserService.isAvailable) {
+        setState(() {
+          _messages.add(_Message(
+            text: AppStrings.get('ai_assistant_unavailable', currentLanguage.value),
+            isUser: false,
+          ));
+          _loading = false;
+        });
+        _scroll();
+        return;
+      }
+
       if (access != null && access.tier == SubscriptionTier.free) {
         await _incrementAiUsage();
       }

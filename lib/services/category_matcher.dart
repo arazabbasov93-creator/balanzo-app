@@ -1,5 +1,13 @@
 import '../models/category.dart';
 
+// FALLBACK ONLY: This keyword matcher runs when AI
+// is unavailable or API key is not configured.
+// AI is the primary category assignment path and
+// handles all languages and formats globally.
+// Do not extend these keywords per market or
+// language — AI handles global categorization.
+// Do not remove this file.
+
 /// Suggests a category for a product name using keyword rules (AZ + EN + RU).
 /// Store name is only used when the product name has no keyword match.
 class CategoryMatcher {

@@ -17,7 +17,8 @@ class LastWeekSpendCard extends StatelessWidget {
         current: insights.thisWeekSpend,
         previous: insights.lastWeekSpend,
         previousLabel: AppStrings.get('dash_last_week', lang),
-        show: insights.thisWeekSpend > 0 || insights.lastWeekSpend > 0,
+        show: insights.showWeekComparison &&
+            (insights.thisWeekSpend > 0 || insights.lastWeekSpend > 0),
       ),
       _CompareRow(
         label: AppStrings.get('dash_this_month', lang),

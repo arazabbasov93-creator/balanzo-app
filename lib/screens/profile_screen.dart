@@ -390,7 +390,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             _Tile(icon: Icons.bar_chart_outlined, label: AppStrings.get('analytics', _language), onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AnalyticsScreen()))),
             _Tile(icon: Icons.category_outlined, label: AppStrings.get('categories', _language), onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CategoriesScreen()))),
+            // VAT TRACKER: Hidden — requires government ƏDV
+            // API integration. Do not delete.
+            // Re-enable when API is available.
             // HIDDEN: VAT tracker disabled — requires government DVX API (Phase 2). Do not delete.
+            // VAT TRACKER: Hidden — requires government ƏDV
+            // API integration. Do not delete.
+            // Re-enable when API is available.
             // _Tile(icon: Icons.receipt_long_outlined, label: AppStrings.get('vat_tracker', _language), onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const VatTrackerScreen()))),
             _Tile(icon: Icons.share_outlined, label: AppStrings.get('share_my_stats', _language), onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ShareScreen()))),
             _Tile(

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../app_state.dart';
+import '../l10n/app_strings.dart';
 import '../services/ekassa_service.dart';
 import '../models/receipt.dart';
 import 'receipt_result_sheet.dart';
@@ -24,9 +26,10 @@ class _FiscalIdScreenState extends State<FiscalIdScreen> {
   }
 
   Future<void> _fetch() async {
+    final lang = currentLanguage.value;
     final raw = _ctrl.text.trim();
     if (raw.isEmpty) {
-      setState(() => _error = 'Please enter a fiscal document ID');
+      setState(() => _error = AppStrings.get('fiscal_id_required', lang));
       return;
     }
     setState(() {
@@ -83,11 +86,14 @@ class _FiscalIdScreenState extends State<FiscalIdScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final lang = currentLanguage.value;
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Enter Fiscal ID',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          AppStrings.get('enter_fiscal_id', lang),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: const Color(0xFF1B5E20),
         foregroundColor: Colors.white,
         elevation: 0,
@@ -98,7 +104,6 @@ class _FiscalIdScreenState extends State<FiscalIdScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 12),
-            // Illustration
             Container(
               width: 72,
               height: 72,
@@ -113,9 +118,9 @@ class _FiscalIdScreenState extends State<FiscalIdScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
-              'Fiscal Document ID',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            Text(
+              AppStrings.get('fiscal_document_id', lang),
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
             ),
             const SizedBox(height: 8),
             TextField(
@@ -123,7 +128,7 @@ class _FiscalIdScreenState extends State<FiscalIdScreen> {
               keyboardType: TextInputType.url,
               maxLines: 2,
               decoration: InputDecoration(
-                hintText: 'E7av3BYTEgRV or full QR URL',
+                hintText: AppStrings.get('fiscal_id_hint', lang),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(color: Colors.grey.shade300),
@@ -153,7 +158,7 @@ class _FiscalIdScreenState extends State<FiscalIdScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Find this ID on your paper receipt or in your e-mail confirmation.',
+              AppStrings.get('fiscal_id_help', lang),
               style: const TextStyle(fontSize: 12, color: Colors.black54),
             ),
             const SizedBox(height: 28),
@@ -170,7 +175,9 @@ class _FiscalIdScreenState extends State<FiscalIdScreen> {
                       )
                     : const Icon(Icons.search),
                 label: Text(
-                  _loading ? 'Fetching receipt…' : 'Fetch Receipt',
+                  _loading
+                      ? AppStrings.get('processing_receipt', lang)
+                      : AppStrings.get('fetch_receipt', lang),
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
                 style: ElevatedButton.styleFrom(
@@ -183,7 +190,7 @@ class _FiscalIdScreenState extends State<FiscalIdScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            const _EkassaNote(),
+            _EkassaNote(lang: lang),
           ],
         ),
       ),
@@ -192,7 +199,9 @@ class _FiscalIdScreenState extends State<FiscalIdScreen> {
 }
 
 class _EkassaNote extends StatelessWidget {
-  const _EkassaNote();
+  final String lang;
+
+  const _EkassaNote({required this.lang});
 
   @override
   Widget build(BuildContext context) {
@@ -202,16 +211,15 @@ class _EkassaNote extends StatelessWidget {
         color: const Color(0xFFE8F5E9),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: const Row(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.verified_outlined, color: Color(0xFF1B5E20), size: 20),
-          SizedBox(width: 10),
+          const Icon(Icons.verified_outlined, color: Color(0xFF1B5E20), size: 20),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Receipts fetched by Fiscal ID are verified directly against '
-              'the Azerbaijan e-kassa government database.',
-              style: TextStyle(
+              AppStrings.get('fiscal_ekassa_note', lang),
+              style: const TextStyle(
                 fontSize: 12,
                 color: Color(0xFF1B5E20),
                 height: 1.5,

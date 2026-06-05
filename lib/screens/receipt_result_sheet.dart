@@ -114,7 +114,7 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
   Future<void> _loadCategories() async {
     final cats = await CategoryService.fetchAll();
     if (!mounted) return;
-    final assigned = CategoryAssignmentService.assignItems(
+    final assigned = await CategoryAssignmentService.assignItems(
       _receipt.items,
       cats,
       storeName: _receipt.store,
@@ -219,8 +219,8 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
     }
     setState(() => _saving = true);
     try {
-      NotificationService.requestIfNotAsked();
-      final edited = CategoryAssignmentService.assignReceipt(
+      await NotificationService.requestIfNotAsked();
+      final edited = await CategoryAssignmentService.assignReceipt(
         _buildEditedReceipt(),
         _categories,
       );
