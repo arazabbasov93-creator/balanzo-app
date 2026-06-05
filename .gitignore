@@ -48,3 +48,4 @@ app.*.map.json
 android/key.properties
 *.jks
 lib/config/anthropic_config.dart
+lib/config/anthropic_config.dart
