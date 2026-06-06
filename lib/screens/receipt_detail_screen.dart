@@ -9,8 +9,11 @@ import '../services/category_service.dart';
 import '../services/family_service.dart';
 import '../utils/receipt_numbers.dart';
 import '../widgets/category_picker_sheet.dart';
+import '../widgets/currency_picker_sheet.dart';
 import '../widgets/copyable_fiscal_id.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/currency_data.dart';
+import '../services/supabase_access.dart';
+import '../config/app_colors.dart';
 
 // ── Editable item state ────────────────────────────────────────────────────────
 
@@ -137,7 +140,7 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
     if (_saving) return;
     setState(() => _saving = true);
     try {
-      final supabase = Supabase.instance.client;
+      final supabase = SupabaseAccess.client;
 
       // Update receipt header
       await supabase.from('receipts').update({
@@ -224,7 +227,6 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(widget.receipt.store ?? 'Receipt'),
-        backgroundColor: const Color(0xFF1B5E20),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: _editMode
@@ -312,8 +314,10 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
         final data = snapshot.data!;
         final rowItems =
             (data.row['receipt_items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        final currency = data.row['currency'] as String?;
         return _ReceiptBody(
           receipt: widget.receipt,
+          currency: currency,
           fiscalId: data.row['fiscal_id'] as String?,
           items: rowItems,
           categories: data.categories,
@@ -321,6 +325,7 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
           isFamilyScope: data.isFamilyScope,
           scopeUpdating: _scopeUpdating,
           onScopeChanged: _setFamilyScope,
+          onCurrencyChanged: (code) => _updateCurrency(code),
           onCategoryChanged: (itemId, catId) =>
               _assignCategory(itemId, catId, data.categories),
         );
@@ -368,7 +373,7 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
               },
               icon: const Icon(Icons.add, size: 18),
               label: const Text('Add Item'),
-              style: TextButton.styleFrom(foregroundColor: const Color(0xFF1B5E20)),
+              style: TextButton.styleFrom(foregroundColor: AppColors.primaryGreenDark),
             ),
           ],
         ),
@@ -381,7 +386,7 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
             elevation: 0,
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               side: BorderSide(color: Theme.of(context).dividerColor),
             ),
             child: Padding(
@@ -493,6 +498,11 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
     ));
   }
 
+  Future<void> _updateCurrency(String? code) async {
+    await ReceiptService.updateCurrency(widget.receiptId, code);
+    if (mounted) _refresh();
+  }
+
   Future<void> _assignCategory(
     String itemId,
     String? catId,
@@ -541,7 +551,6 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Receipt refreshed from e-kassa'),
-            backgroundColor: Color(0xFF1B5E20),
           ),
         );
       }
@@ -612,6 +621,7 @@ class _DetailData {
 
 class _ReceiptBody extends StatelessWidget {
   final Receipt receipt;
+  final String? currency;
   final String? fiscalId;
   final List<Map<String, dynamic>> items;
   final List<Category> categories;
@@ -619,10 +629,12 @@ class _ReceiptBody extends StatelessWidget {
   final bool isFamilyScope;
   final bool scopeUpdating;
   final void Function(bool asFamily)? onScopeChanged;
+  final void Function(String? code)? onCurrencyChanged;
   final void Function(String itemId, String? catId) onCategoryChanged;
 
   const _ReceiptBody({
     required this.receipt,
+    this.currency,
     this.fiscalId,
     required this.items,
     required this.categories,
@@ -630,6 +642,7 @@ class _ReceiptBody extends StatelessWidget {
     this.isFamilyScope = false,
     this.scopeUpdating = false,
     this.onScopeChanged,
+    this.onCurrencyChanged,
     required this.onCategoryChanged,
   });
 
@@ -638,7 +651,43 @@ class _ReceiptBody extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        _Header(receipt: receipt),
+        _Header(receipt: receipt, currency: currency),
+        if (onCurrencyChanged != null) ...[
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: () async {
+              final selected = await showCurrencyPickerSheet(
+                context,
+                initialCurrency: currency,
+              );
+              onCurrencyChanged!(selected);
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  Icon(Icons.payments_outlined,
+                      size: 16,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      currencyDisplayLabel(currency),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                  Icon(Icons.expand_more,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ],
+              ),
+            ),
+          ),
+        ],
         if (onScopeChanged != null) ...[
           const SizedBox(height: 16),
           _FamilyScopeToggle(
@@ -686,21 +735,21 @@ class _ReceiptBody extends StatelessWidget {
         else
           ...receipt.items.map((item) => _SimpleItemRow(item: item)),
         const Divider(height: 32),
-        _TotalsSection(receipt: receipt),
+        _TotalsSection(receipt: receipt, currency: currency),
         const SizedBox(height: 32),
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: const Color(0xFFE8F5E9),
+            color: AppColors.green100,
             borderRadius: BorderRadius.circular(12),
           ),
           child: const Row(
             children: [
-              Icon(Icons.check_circle, color: Color(0xFF1B5E20), size: 18),
+              Icon(Icons.check_circle, color: AppColors.primaryGreenDark, size: 18),
               SizedBox(width: 8),
               Text(
                 'Receipt saved successfully',
-                style: TextStyle(color: Color(0xFF1B5E20), fontWeight: FontWeight.w500),
+                style: TextStyle(color: AppColors.primaryGreenDark, fontWeight: FontWeight.w500),
               ),
             ],
           ),
@@ -782,7 +831,7 @@ class _ScopeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? const Color(0xFFE8F5E9) : Colors.grey.shade100,
+      color: selected ? AppColors.green100 : Colors.grey.shade100,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -792,7 +841,7 @@ class _ScopeChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: selected ? const Color(0xFF1B5E20) : Colors.grey.shade300,
+              color: selected ? AppColors.primaryGreenDark : Colors.grey.shade300,
               width: selected ? 1.5 : 1,
             ),
           ),
@@ -802,7 +851,7 @@ class _ScopeChip extends StatelessWidget {
               Icon(
                 icon,
                 size: 16,
-                color: selected ? const Color(0xFF1B5E20) : Colors.black54,
+                color: selected ? AppColors.primaryGreenDark : Colors.black54,
               ),
               const SizedBox(width: 6),
               Text(
@@ -810,7 +859,7 @@ class _ScopeChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: selected ? const Color(0xFF1B5E20) : Colors.black54,
+                  color: selected ? AppColors.primaryGreenDark : Colors.black54,
                 ),
               ),
             ],
@@ -823,7 +872,8 @@ class _ScopeChip extends StatelessWidget {
 
 class _Header extends StatelessWidget {
   final Receipt receipt;
-  const _Header({required this.receipt});
+  final String? currency;
+  const _Header({required this.receipt, this.currency});
 
   String _formatDate(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
@@ -836,10 +886,10 @@ class _Header extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: const Color(0xFFE8F5E9),
-            borderRadius: BorderRadius.circular(14),
+            color: AppColors.green100,
+            borderRadius: BorderRadius.circular(12),
           ),
-          child: const Icon(Icons.receipt_long, color: Color(0xFF1B5E20), size: 30),
+          child: const Icon(Icons.receipt_long, color: AppColors.primaryGreenDark, size: 30),
         ),
         const SizedBox(width: 16),
         Expanded(
@@ -869,11 +919,11 @@ class _Header extends StatelessWidget {
           ),
         ),
         Text(
-          '${receipt.total.toStringAsFixed(2)} ${receipt.currency}',
+          formatMoney(receipt.total, currency ?? receipt.currency),
           style: const TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF1B5E20),
+            color: AppColors.primaryGreenDark,
           ),
         ),
       ],
@@ -1041,14 +1091,15 @@ class _SimpleItemRow extends StatelessWidget {
 
 class _TotalsSection extends StatelessWidget {
   final Receipt receipt;
-  const _TotalsSection({required this.receipt});
+  final String? currency;
+  const _TotalsSection({required this.receipt, this.currency});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         if (receipt.subtotal > 0 && receipt.subtotal != receipt.total)
-          _TotalRow(label: 'Subtotal', value: receipt.subtotal, currency: receipt.currency),
+          _TotalRow(label: 'Subtotal', value: receipt.subtotal, currency: currency ?? receipt.currency),
         // VAT TRACKER: Hidden — requires government ƏDV
         // API integration. Do not delete.
         // Re-enable when API is available.
@@ -1057,7 +1108,7 @@ class _TotalsSection extends StatelessWidget {
         // API integration. Do not delete.
         // Re-enable when API is available.
         // if (receipt.vat > 0) _TotalRow(label: 'VAT', value: receipt.vat, currency: receipt.currency),
-        _TotalRow(label: 'Total', value: receipt.total, currency: receipt.currency, bold: true),
+        _TotalRow(label: 'Total', value: receipt.total, currency: currency ?? receipt.currency, bold: true),
       ],
     );
   }
@@ -1066,7 +1117,7 @@ class _TotalsSection extends StatelessWidget {
 class _TotalRow extends StatelessWidget {
   final String label;
   final double value;
-  final String currency;
+  final String? currency;
   final bool bold;
   const _TotalRow({
     required this.label,
@@ -1093,12 +1144,12 @@ class _TotalRow extends StatelessWidget {
             ),
           ),
           Text(
-            '${value.toStringAsFixed(2)} $currency',
+            formatMoney(value, currency),
             style: TextStyle(
               fontSize: bold ? 18 : 14,
               fontWeight: bold ? FontWeight.bold : FontWeight.w500,
               color: bold
-                  ? const Color(0xFF1B5E20)
+                  ? AppColors.primaryGreenDark
                   : Theme.of(context).colorScheme.onSurface,
             ),
           ),

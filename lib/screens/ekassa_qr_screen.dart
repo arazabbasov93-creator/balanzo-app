@@ -8,6 +8,7 @@ import 'fiscal_id_screen.dart';
 import 'manual_entry_screen.dart';
 import 'receipt_result_sheet.dart';
 import 'receipt_save_success_screen.dart';
+import '../config/app_colors.dart';
 
 /// 2D symbologies used on e-kassa receipts — excludes linear product barcodes.
 const _ekassa2dFormats = <BarcodeFormat>[
@@ -173,7 +174,7 @@ class _EkassaQrScreenState extends State<EkassaQrScreen> {
               width: 260,
               height: 260,
               decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFF4CAF50), width: 2),
+                border: Border.all(color: AppColors.green400, width: 2),
                 borderRadius: BorderRadius.circular(16),
               ),
             ),
@@ -210,7 +211,7 @@ class _EkassaQrScreenState extends State<EkassaQrScreen> {
                   ),
                 if (_processing) ...[
                   const SizedBox(height: 16),
-                  const CircularProgressIndicator(color: Color(0xFF4CAF50)),
+                  const CircularProgressIndicator(color: AppColors.green400),
                 ],
                 if (!_processing) ...[
                   const SizedBox(height: 16),
@@ -220,7 +221,7 @@ class _EkassaQrScreenState extends State<EkassaQrScreen> {
                     label: Text(AppStrings.get('enter_fiscal_manually', lang)),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.white,
-                      side: const BorderSide(color: Color(0xFF81C784)),
+                      side: const BorderSide(color: AppColors.green300),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(30),

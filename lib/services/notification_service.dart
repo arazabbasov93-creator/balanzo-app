@@ -1,8 +1,12 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class NotificationService {
+  /// iOS native plugin can SIGKILL the process during initialize(); keep off iOS.
+  static bool get _nativeEnabled => !Platform.isIOS;
   static final _plugin = FlutterLocalNotificationsPlugin();
   static const _historyKey = 'notification_history';
   static const _permissionAskedKey = 'notification_permission_asked';
@@ -14,16 +18,32 @@ class NotificationService {
     importance: Importance.high,
   );
 
+  /// Lazy init — never call during app bootstrap (native iOS plugin can crash/kill).
+  static bool _initialized = false;
+  static bool _initFailed = false;
+
   static Future<void> init() async {
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosSettings = DarwinInitializationSettings();
-    await _plugin.initialize(
-      const InitializationSettings(android: androidSettings, iOS: iosSettings),
-    );
-    await _plugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(_channel);
+    if (!_nativeEnabled || _initialized || _initFailed) return;
+    try {
+      const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const iosSettings = DarwinInitializationSettings();
+      await _plugin.initialize(
+        const InitializationSettings(android: androidSettings, iOS: iosSettings),
+      );
+      await _plugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(_channel);
+      _initialized = true;
+    } catch (e, st) {
+      _initFailed = true;
+      debugPrint('[NotificationService] init failed: $e\n$st');
+    }
+  }
+
+  static Future<void> ensureInitialized() async {
+    if (_initialized || _initFailed) return;
+    await init();
   }
 
   static Future<bool> hasPermissionBeenAsked() async {
@@ -32,16 +52,23 @@ class NotificationService {
   }
 
   static Future<void> requestPermission() async {
+    if (!_nativeEnabled) return;
+    await ensureInitialized();
+    if (!_initialized) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_permissionAskedKey, true);
-    await _plugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
-    await _plugin
-        .resolvePlatformSpecificImplementation<
-            IOSFlutterLocalNotificationsPlugin>()
-        ?.requestPermissions(alert: true, badge: true, sound: true);
+    try {
+      await _plugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
+      await _plugin
+          .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin>()
+          ?.requestPermissions(alert: true, badge: true, sound: true);
+    } catch (e, st) {
+      debugPrint('[NotificationService] requestPermission failed: $e\n$st');
+    }
   }
 
   static Future<void> _show({
@@ -50,17 +77,27 @@ class NotificationService {
     required String body,
     String type = 'info',
   }) async {
-    const details = NotificationDetails(
-      android: AndroidNotificationDetails(
-        'balanzo_notifications',
-        'Balanzo Alerts',
-        importance: Importance.high,
-        priority: Priority.high,
-      ),
-      iOS: DarwinNotificationDetails(),
-    );
-    await _plugin.show(id, title, body, details);
-    await _saveToHistory(title: title, body: body, type: type);
+    if (!_nativeEnabled) {
+      await _saveToHistory(title: title, body: body, type: type);
+      return;
+    }
+    await ensureInitialized();
+    if (!_initialized) return;
+    try {
+      const details = NotificationDetails(
+        android: AndroidNotificationDetails(
+          'balanzo_notifications',
+          'Balanzo Alerts',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+      );
+      await _plugin.show(id, title, body, details);
+      await _saveToHistory(title: title, body: body, type: type);
+    } catch (e, st) {
+      debugPrint('[NotificationService] show failed: $e\n$st');
+    }
   }
 
   static Future<void> sendRestockReminder(String itemName) async {
@@ -71,19 +108,6 @@ class NotificationService {
       type: 'restock',
     );
   }
-
-  // VAT TRACKER: Hidden — requires government ƏDV
-  // API integration. Do not delete.
-  // Re-enable when API is available.
-  // static Future<void> sendVatAlert(double vatAmount) async {
-  //   await _show(
-  //     id: 101,
-  //     title: 'Unclaimed VAT Alert',
-  //     body:
-  //         'You have ${vatAmount.toStringAsFixed(2)} AZN in unclaimed VAT this month.',
-  //     type: 'vat',
-  //   );
-  // }
 
   static Future<void> sendMonthlySummary({
     required double total,
@@ -108,24 +132,26 @@ class NotificationService {
     );
   }
 
-  // --- History persistence (shown in NotificationsScreen) ---
-
   static Future<void> _saveToHistory({
     required String title,
     required String body,
     required String type,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getStringList(_historyKey) ?? [];
-    final entry = jsonEncode({
-      'title': title,
-      'body': body,
-      'type': type,
-      'ts': DateTime.now().toIso8601String(),
-    });
-    raw.insert(0, entry);
-    if (raw.length > 50) raw.removeRange(50, raw.length);
-    await prefs.setStringList(_historyKey, raw);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getStringList(_historyKey) ?? [];
+      final entry = jsonEncode({
+        'title': title,
+        'body': body,
+        'type': type,
+        'ts': DateTime.now().toIso8601String(),
+      });
+      raw.insert(0, entry);
+      if (raw.length > 50) raw.removeRange(50, raw.length);
+      await prefs.setStringList(_historyKey, raw);
+    } catch (e, st) {
+      debugPrint('[NotificationService] save history failed: $e\n$st');
+    }
   }
 
   static Future<List<Map<String, dynamic>>> fetchHistory() async {
@@ -152,7 +178,6 @@ class NotificationService {
     );
   }
 
-  /// Call after first receipt scan to ask permission (T103).
   static Future<void> requestIfNotAsked() async {
     if (!await hasPermissionBeenAsked()) {
       await requestPermission();

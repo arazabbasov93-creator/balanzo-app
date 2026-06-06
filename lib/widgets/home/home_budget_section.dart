@@ -5,6 +5,8 @@ import '../../models/budget.dart';
 import '../../models/income.dart';
 import '../../models/home_insights.dart';
 import '../../services/income_service.dart';
+import '../../config/app_colors.dart';
+import '../../utils/currency_data.dart';
 
 class MemberMonthSummary {
   final String userId;
@@ -153,7 +155,7 @@ class _PersonalBalanceCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
@@ -171,7 +173,7 @@ class _PersonalBalanceCard extends StatelessWidget {
             label: AppStrings.get('remaining_balance', lang),
             value: remaining,
             bold: true,
-            valueColor: remaining >= 0 ? const Color(0xFF1B5E20) : Colors.red.shade700,
+            valueColor: remaining >= 0 ? AppColors.primaryGreen(Theme.of(context).brightness) : Colors.red.shade700,
           ),
         ],
       ),
@@ -209,7 +211,7 @@ class _MemberBalanceCard extends StatelessWidget {
             label: AppStrings.get('remaining_balance', lang),
             value: member.remaining,
             valueColor: member.remaining >= 0
-                ? const Color(0xFF1B5E20)
+                ? AppColors.primaryGreen(Theme.of(context).brightness)
                 : Colors.red.shade700,
           ),
         ],
@@ -234,7 +236,7 @@ class _TotalsRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1B5E20).withValues(alpha: 0.08),
+        color: AppColors.primaryGreen(Theme.of(context).brightness).withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -246,7 +248,7 @@ class _TotalsRow extends StatelessWidget {
             value: income - spend,
             bold: true,
             valueColor: income - spend >= 0
-                ? const Color(0xFF1B5E20)
+                ? AppColors.primaryGreen(Theme.of(context).brightness)
                 : Colors.red.shade700,
           ),
         ],
@@ -287,18 +289,20 @@ class _MoneyRow extends StatelessWidget {
               ),
             ),
           ),
-          if (onTap != null && actionLabel != null)
+          if (onTap != null && actionLabel != null) ...[
             TextButton(
               onPressed: onTap,
               style: TextButton.styleFrom(
-                padding: EdgeInsets.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               child: Text(actionLabel!, style: const TextStyle(fontSize: 11)),
             ),
+            const SizedBox(width: 8),
+          ],
           Text(
-            '${value.toStringAsFixed(2)} AZN',
+            formatMoney(value, null),
             style: TextStyle(
               fontSize: bold ? 14 : 12,
               fontWeight: bold ? FontWeight.bold : FontWeight.w600,
@@ -329,9 +333,7 @@ class _BudgetRow extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  budget.categoryName != null
-                      ? AppStrings.categoryName(budget.categoryName!, lang)
-                      : AppStrings.get('budget_section', lang),
+                  budget.categoryName ?? AppStrings.get('budget_section', lang),
                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
                 ),
               ),
@@ -346,7 +348,7 @@ class _BudgetRow extends StatelessWidget {
             value: frac,
             minHeight: 4,
             backgroundColor: Colors.grey.shade300,
-            color: budget.isOverBudget ? Colors.red : const Color(0xFF1B5E20),
+            color: budget.isOverBudget ? Colors.red : AppColors.primaryGreen(Theme.of(context).brightness),
           ),
         ],
       ),
@@ -413,7 +415,7 @@ Future<void> showIncomeEditorSheet(
                         leading: Icon(
                           e.recurring ? Icons.repeat : Icons.event,
                           size: 20,
-                          color: const Color(0xFF1B5E20),
+                          color: AppColors.primaryGreen(Theme.of(context).brightness),
                         ),
                         title: Text(e.label),
                         subtitle: Text(

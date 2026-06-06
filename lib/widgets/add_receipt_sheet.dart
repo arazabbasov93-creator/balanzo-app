@@ -5,6 +5,7 @@ import '../screens/ekassa_qr_screen.dart';
 import '../screens/fiscal_id_screen.dart';
 import '../screens/manual_entry_screen.dart';
 import '../screens/receipt_capture_screen.dart';
+import '../config/app_colors.dart';
 
 /// Opens the add-receipt bottom sheet (photo, QR, fiscal ID, manual).
 void showAddReceiptSheet(BuildContext context, {VoidCallback? onDone}) {
@@ -14,7 +15,7 @@ void showAddReceiptSheet(BuildContext context, {VoidCallback? onDone}) {
     context: context,
     backgroundColor: cs.surfaceContainerHighest,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
     ),
     builder: (ctx) => SafeArea(
       child: Padding(
@@ -41,8 +42,9 @@ void showAddReceiptSheet(BuildContext context, {VoidCallback? onDone}) {
             ),
             const SizedBox(height: 16),
             ListTile(
-              leading: const Icon(Icons.document_scanner_outlined,
-                  color: Color(0xFF1B5E20)),
+              tileColor: Colors.transparent,
+              leading: Icon(Icons.document_scanner_outlined,
+                  color: AppColors.primaryGreen(Theme.of(ctx).brightness)),
               title: Text(
                 '📷  ${AppStrings.get('scan_receipt', lang)}',
                 style: TextStyle(
@@ -62,8 +64,9 @@ void showAddReceiptSheet(BuildContext context, {VoidCallback? onDone}) {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.qr_code_scanner,
-                  color: Color(0xFF1B5E20)),
+              tileColor: Colors.transparent,
+              leading: Icon(Icons.qr_code_scanner,
+                  color: AppColors.primaryGreen(Theme.of(ctx).brightness)),
               title: Text(
                 '📱  ${AppStrings.get('scan_qr_code', lang)}',
                 style: TextStyle(
@@ -83,8 +86,9 @@ void showAddReceiptSheet(BuildContext context, {VoidCallback? onDone}) {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.numbers_outlined,
-                  color: Color(0xFF1B5E20)),
+              tileColor: Colors.transparent,
+              leading: Icon(Icons.numbers_outlined,
+                  color: AppColors.primaryGreen(Theme.of(ctx).brightness)),
               title: Text(
                 '🔢  ${AppStrings.get('enter_fiscal_id', lang)}',
                 style: TextStyle(
@@ -104,8 +108,9 @@ void showAddReceiptSheet(BuildContext context, {VoidCallback? onDone}) {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.edit_note_outlined,
-                  color: Color(0xFF1B5E20)),
+              tileColor: Colors.transparent,
+              leading: Icon(Icons.edit_note_outlined,
+                  color: AppColors.primaryGreen(Theme.of(ctx).brightness)),
               title: Text(
                 '✏️  ${AppStrings.get('manual_entry', lang)}',
                 style: TextStyle(

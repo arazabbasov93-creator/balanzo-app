@@ -2,9 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'supabase_access.dart';
 
 class AuthService {
-  static final _supabase = Supabase.instance.client;
+  static SupabaseClient get _supabase => SupabaseAccess.client;
 
   static const _webClientId =
       '613777273688-s5to8t2nvu7v6d9stb2sjdlvfffj2vdu.apps.googleusercontent.com';
@@ -123,8 +124,8 @@ class AuthService {
     await _supabase.auth.signOut();
   }
 
-  static User? get currentUser => _supabase.auth.currentUser;
+  static User? get currentUser => SupabaseAccess.clientOrNull?.auth.currentUser;
 
   static Stream<AuthState> get authStateChanges =>
-      _supabase.auth.onAuthStateChange;
+      SupabaseAccess.client.auth.onAuthStateChange;
 }

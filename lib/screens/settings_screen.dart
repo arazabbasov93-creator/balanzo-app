@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'categories_screen.dart';
 import 'analytics_screen.dart';
+import '../config/app_colors.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -12,10 +13,9 @@ class SettingsScreen extends StatelessWidget {
     final identity = user?.phone ?? user?.email ?? 'User';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppColors.scaffoldDark : AppColors.scaffoldLight,
       appBar: AppBar(
         title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1B5E20),
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -26,7 +26,7 @@ class SettingsScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppColors.card(Theme.of(context).brightness),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.grey.shade200),
             ),
@@ -34,11 +34,11 @@ class SettingsScreen extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 28,
-                  backgroundColor: const Color(0xFFE8F5E9),
+                  backgroundColor: AppColors.green100,
                   child: Text(
                     identity.isNotEmpty ? identity.substring(0, 1).toUpperCase() : '?',
                     style: const TextStyle(
-                      color: Color(0xFF1B5E20),
+                      color: AppColors.primaryGreenDark,
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
                     ),
@@ -166,7 +166,8 @@ class _SettingsTile extends StatelessWidget {
         side: BorderSide(color: Colors.grey.shade200),
       ),
       child: ListTile(
-        leading: Icon(icon, color: iconColor ?? const Color(0xFF1B5E20)),
+        tileColor: Colors.transparent,
+        leading: Icon(icon, color: iconColor ?? AppColors.primaryGreenDark),
         title: Text(
           label,
           style: TextStyle(

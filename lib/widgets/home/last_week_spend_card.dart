@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../app_state.dart';
 import '../../l10n/app_strings.dart';
 import '../../models/home_insights.dart';
+import '../../utils/currency_data.dart';
 
 class LastWeekSpendCard extends StatelessWidget {
   final HomeInsights insights;
@@ -42,7 +43,7 @@ class LastWeekSpendCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
@@ -53,7 +54,11 @@ class LastWeekSpendCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Divider(height: 1, color: Theme.of(context).dividerColor),
               ),
-            _ComparisonRow(row: rows[i], lang: lang),
+            _ComparisonRow(
+              row: rows[i],
+              lang: lang,
+              periodCurrency: insights.periodCurrency,
+            ),
           ],
         ],
       ),
@@ -80,8 +85,13 @@ class _CompareRow {
 class _ComparisonRow extends StatelessWidget {
   final _CompareRow row;
   final String lang;
+  final String? periodCurrency;
 
-  const _ComparisonRow({required this.row, required this.lang});
+  const _ComparisonRow({
+    required this.row,
+    required this.lang,
+    this.periodCurrency,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -105,7 +115,7 @@ class _ComparisonRow extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                '${row.current.toStringAsFixed(2)} AZN',
+                formatMoney(row.current, periodCurrency),
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
@@ -129,7 +139,7 @@ class _ComparisonRow extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                '${row.previous.toStringAsFixed(2)} AZN',
+                formatMoney(row.previous, periodCurrency),
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,

@@ -3,6 +3,8 @@ import '../../app_state.dart';
 import '../../l10n/app_strings.dart';
 import '../../models/home_insights.dart';
 import '../../services/user_profile_service.dart';
+import '../../config/app_colors.dart';
+import '../../utils/currency_data.dart';
 
 class HomeGreetingCard extends StatelessWidget {
   final String identity;
@@ -38,7 +40,7 @@ class HomeGreetingCard extends StatelessWidget {
     final periodMatches = insights != null &&
         insights!.periodMonth == periodMonth &&
         insights!.periodYear == periodYear;
-    final spend = periodMatches ? insights!.thisMonthTotal : 0;
+    final spend = periodMatches ? insights!.thisMonthTotal : 0.0;
     final remaining = incomeTotal - spend;
     final years = List.generate(5, (i) => DateTime.now().year - i);
 
@@ -48,15 +50,18 @@ class HomeGreetingCard extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: attachedToHeader
             ? null
-            : const LinearGradient(
-                colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+            : LinearGradient(
+          colors: [
+            AppColors.primaryGreen(Theme.of(context).brightness),
+            AppColors.gradientEnd(Theme.of(context).brightness),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         color: attachedToHeader ? Colors.transparent : null,
         borderRadius: attachedToHeader
             ? null
-            : BorderRadius.circular(18),
+            : BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -88,13 +93,13 @@ class HomeGreetingCard extends StatelessWidget {
           if (incomeTotal > 0) ...[
             const SizedBox(height: 6),
             Text(
-              '${AppStrings.get('income_total', lang)}: ${incomeTotal.toStringAsFixed(2)} AZN',
+              '${AppStrings.get('income_total', lang)}: ${formatMoney(incomeTotal, insights?.periodCurrency)}',
               style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
           ],
           const SizedBox(height: 4),
           Text(
-            '${spend.toStringAsFixed(2)} AZN',
+            formatMoney(spend, insights?.periodCurrency),
             style: const TextStyle(
               color: Colors.white,
               fontSize: 26,
@@ -109,7 +114,7 @@ class HomeGreetingCard extends StatelessWidget {
           if (incomeTotal > 0) ...[
             const SizedBox(height: 4),
             Text(
-              '${AppStrings.get('remaining_balance', lang)}: ${remaining.toStringAsFixed(2)} AZN',
+              '${AppStrings.get('remaining_balance', lang)}: ${formatMoney(remaining, insights?.periodCurrency)}',
               style: TextStyle(
                 color: remaining >= 0 ? Colors.lightGreen.shade100 : Colors.amber.shade100,
                 fontSize: 12,
@@ -204,14 +209,14 @@ class _MiniDropdown<T> extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<T>(
           value: value,
           items: items,
           onChanged: onChanged,
-          dropdownColor: const Color(0xFF2E7D32),
+          dropdownColor: AppColors.gradientEnd(Theme.of(context).brightness),
           icon: const Icon(Icons.arrow_drop_down, color: Colors.white, size: 16),
           isDense: true,
         ),

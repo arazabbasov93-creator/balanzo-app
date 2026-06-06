@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/supabase_access.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../app_state.dart';
 import '../l10n/app_strings.dart';
 import '../services/notification_service.dart';
 import '../services/receipt_service.dart';
+import '../config/app_colors.dart';
 
 class RestockScreen extends StatefulWidget {
   const RestockScreen({super.key});
@@ -34,7 +35,11 @@ class _RestockScreenState extends State<RestockScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final client = Supabase.instance.client;
+      final client = SupabaseAccess.clientOrNull;
+      if (client == null) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
       final userId = client.auth.currentUser?.id;
       if (userId == null) {
         setState(() => _loading = false);
@@ -117,6 +122,7 @@ class _RestockScreenState extends State<RestockScreen> {
 
       items.sort((a, b) => a.daysUntilDue.compareTo(b.daysUntilDue));
 
+      if (!mounted) return;
       setState(() {
         _items = items;
         _loading = false;
@@ -124,10 +130,14 @@ class _RestockScreenState extends State<RestockScreen> {
 
       final overdue = items.where((i) => i.daysUntilDue < 0).toList();
       if (overdue.isNotEmpty) {
-        await NotificationService.sendRestockReminder(overdue.first.name);
+        try {
+          await NotificationService.sendRestockReminder(overdue.first.name);
+        } catch (e, st) {
+          debugPrint('[Restock] notification skipped: $e\n$st');
+        }
       }
     } catch (e) {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error loading restock data: $e'), backgroundColor: Colors.red),
@@ -361,12 +371,15 @@ class _BasketCostCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
+        gradient: LinearGradient(
+          colors: [
+            AppColors.primaryGreen(Theme.of(context).brightness),
+            AppColors.gradientEnd(Theme.of(context).brightness),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: [
@@ -452,7 +465,7 @@ class _RestockCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Padding(
@@ -532,8 +545,8 @@ class _RestockCard extends StatelessWidget {
                 FilledButton.tonal(
                   onPressed: onBought,
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFE8F5E9),
-                    foregroundColor: const Color(0xFF1B5E20),
+                    backgroundColor: AppColors.green100,
+                    foregroundColor: AppColors.primaryGreenDark,
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                   ),
                   child: Text(
@@ -591,10 +604,10 @@ class _EmptyState extends StatelessWidget {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: const Color(0xFF1E2F1E),
-              borderRadius: BorderRadius.circular(20),
+              color: AppColors.tintSurfaceDark,
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.shopping_cart_outlined, size: 44, color: Color(0xFF1B5E20)),
+            child: const Icon(Icons.shopping_cart_outlined, size: 44, color: AppColors.primaryGreenDark),
           ),
           const SizedBox(height: 20),
           Text(

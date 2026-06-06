@@ -2,14 +2,15 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../app_state.dart';
+import '../services/supabase_access.dart';
 import '../config/anthropic_config.dart';
 import '../l10n/app_strings.dart';
 import '../services/analytics_service.dart';
 import '../services/receipt_parser_service.dart';
 import '../services/subscription_service.dart';
 import 'upgrade_screen.dart';
+import '../config/app_colors.dart';
 
 class AiChatScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -56,7 +57,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
       text: AppStrings.aiGreeting(currentLanguage.value),
       isUser: false,
     ));
-    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    final prefs = await SharedPreferences.getInstance()
+        .timeout(const Duration(seconds: 5));
+    if (!mounted) return;
     final alreadyShown = prefs.getBool('milestone_sheet_shown') ?? false;
     if (access.isLoyalUser &&
         access.tier == SubscriptionTier.free &&
@@ -72,7 +76,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
       builder: (_) => Padding(
         padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
@@ -89,7 +93,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
             const Text(
               'You\'ve been tracking your budget for 6 months. Upgrade to see 30 days of data in AI chat and get unlimited questions.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Color(0xFF8888A0), fontSize: 14),
+              style: TextStyle(color: AppColors.darkOnSurfaceVariant, fontSize: 14),
             ),
             const SizedBox(height: 20),
             SizedBox(
@@ -102,10 +106,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   );
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1B5E20),
+                  backgroundColor: AppColors.primaryGreen(
+                    Theme.of(context).brightness,
+                  ),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 child: const Text(
                   'Unlock Premium',
@@ -125,7 +131,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
   Future<String> _buildContext(int dataWindowDays) async {
     try {
-      final supabase = Supabase.instance.client;
+      final supabase = SupabaseAccess.client;
       final userId = supabase.auth.currentUser?.id;
       if (userId == null) return '';
       final since = DateTime.now().subtract(Duration(days: dataWindowDays));
@@ -144,7 +150,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
   Future<void> _incrementAiUsage() async {
     try {
-      final supabase = Supabase.instance.client;
+      final supabase = SupabaseAccess.client;
       final uid = supabase.auth.currentUser?.id;
       if (uid == null) return;
       final now = DateTime.now();
@@ -178,8 +184,15 @@ class _AiChatScreenState extends State<AiChatScreen> {
             lang,
           );
 
-    return Material(
-      color: limitReached ? const Color(0xFF1B5E20) : Theme.of(context).colorScheme.surfaceContainerHighest,
+    final brightness = Theme.of(context).brightness;
+    return Container(
+      margin: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: limitReached
+            ? AppColors.primaryGreen(brightness)
+            : Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Row(
@@ -214,7 +227,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 AppStrings.get('ai_upgrade', lang),
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: limitReached ? Colors.white : const Color(0xFF1B5E20),
+                  color: limitReached ? Colors.white : AppColors.primaryGreenDark,
                 ),
               ),
             ),
@@ -230,7 +243,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
       context: context,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
       builder: (_) => Padding(
         padding: const EdgeInsets.all(24),
@@ -253,7 +266,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
               width: double.infinity,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF4CAF50),
+                  backgroundColor: AppColors.green400,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
@@ -295,6 +308,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
     try {
       if (!ReceiptParserService.isAvailable) {
+        if (!mounted) return;
         setState(() {
           _messages.add(_Message(
             text: AppStrings.get('ai_assistant_unavailable', currentLanguage.value),
@@ -309,6 +323,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
       if (access != null && access.tier == SubscriptionTier.free) {
         await _incrementAiUsage();
       }
+      if (!mounted) return;
       final dataWindowDays = access?.dataWindowDays ?? 7;
       final context = await _buildContext(dataWindowDays);
       final response = await http.post(
@@ -343,6 +358,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
         }),
       );
 
+      if (!mounted) return;
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
         final reply = (json['content'] as List).first['text'] as String;
@@ -365,11 +381,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
         ));
       }
     } catch (_) {
+      if (!mounted) return;
       setState(() => _messages.add(
         _Message(text: 'Network error. Please try again.', isUser: false),
       ));
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
       _scroll();
     }
   }
@@ -437,11 +454,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF18181C),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFF1B5E20).withValues(alpha: 0.5)),
+                          color: AppColors.darkElevated,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.primaryGreenDark.withValues(alpha: 0.5)),
                         ),
-                        child: Text(q, style: const TextStyle(fontSize: 12, color: Color(0xFF4CAF50))),
+                        child: Text(q, style: const TextStyle(fontSize: 12, color: AppColors.green400)),
                       ),
                     ),
                   );
@@ -466,36 +483,36 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF1B5E20)),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryGreenDark),
                   ),
                   const SizedBox(width: 8),
-                  Text(AppStrings.get('thinking', currentLanguage.value), style: const TextStyle(color: Color(0xFF8888A0), fontSize: 13)),
+                  Text(AppStrings.get('thinking', currentLanguage.value), style: const TextStyle(color: AppColors.darkOnSurfaceVariant, fontSize: 13)),
                 ],
               ),
             ),
           // Input
           Container(
-            color: const Color(0xFF18181C),
+            color: AppColors.darkElevated,
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
             child: Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _controller,
-                    style: const TextStyle(color: Color(0xFFF2F2F5)),
+                    style: const TextStyle(color: AppColors.darkOnSurface),
                     decoration: InputDecoration(
                       hintText: AppStrings.get('ask_spending', currentLanguage.value),
-                      hintStyle: const TextStyle(color: Color(0xFF8888A0)),
+                      hintStyle: const TextStyle(color: AppColors.darkOnSurfaceVariant),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: const BorderSide(color: Color(0xFF2C2C34)),
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppColors.darkOutline),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: const BorderSide(color: Color(0xFF4CAF50)),
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppColors.green400),
                       ),
                       filled: true,
-                      fillColor: const Color(0xFF2C2C34),
+                      fillColor: AppColors.darkOutline,
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       enabled: true,
                     ),
@@ -510,7 +527,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     width: 44,
                     height: 44,
                     decoration: const BoxDecoration(
-                      color: Color(0xFF1B5E20),
+                      color: AppColors.primaryGreenDark,
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.send, color: Colors.white, size: 20),
@@ -552,10 +569,10 @@ class _BubbleTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
         decoration: BoxDecoration(
-          color: message.isUser ? const Color(0xFF1B5E20) : const Color(0xFF18181C),
+          color: message.isUser ? AppColors.primaryGreenDark : AppColors.darkElevated,
           borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
+            topLeft: const Radius.circular(12),
+            topRight: const Radius.circular(12),
             bottomLeft: Radius.circular(message.isUser ? 18 : 4),
             bottomRight: Radius.circular(message.isUser ? 4 : 18),
           ),
@@ -570,7 +587,7 @@ class _BubbleTile extends StatelessWidget {
         child: Text(
           message.text,
           style: TextStyle(
-            color: message.isUser ? Colors.white : const Color(0xFFF2F2F5),
+            color: message.isUser ? Colors.white : AppColors.darkOnSurface,
             fontSize: 14,
           ),
         ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../app_state.dart';
 import '../../l10n/app_strings.dart';
 import '../../models/home_insights.dart';
+import '../../config/app_colors.dart';
 
 void showStoresSheet(BuildContext context, List<StoreSpend> stores) {
   if (stores.isEmpty) return;
@@ -271,9 +272,9 @@ class _ProductSummaryHeader extends StatelessWidget {
             byQuantity
                 ? '${_fmtQty(breakdown.periodQuantity)} ${AppStrings.get('dash_qty_unit', lang)}'
                 : '${product.amount.toStringAsFixed(2)} AZN',
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: Color(0xFF1B5E20),
+              color: AppColors.primaryGreen(Theme.of(context).brightness),
             ),
           ),
         ],
@@ -306,7 +307,7 @@ class _ProductBuyRow extends StatelessWidget {
         byQuantity
             ? '${_fmtQty(buy.quantity)} ${AppStrings.get('dash_qty_unit', lang)}'
             : '${buy.amount.toStringAsFixed(2)} AZN',
-        style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF1B5E20)),
+        style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.primaryGreen(Theme.of(context).brightness)),
       ),
     );
   }
@@ -476,11 +477,11 @@ class _StoreRow extends StatelessWidget {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: CircleAvatar(
-        backgroundColor: const Color(0xFFE8F5E9),
+        backgroundColor: AppColors.green100,
         child: Text(
           store.name.isNotEmpty ? store.name[0].toUpperCase() : '?',
-          style: const TextStyle(
-            color: Color(0xFF1B5E20),
+          style: TextStyle(
+            color: AppColors.primaryGreen(Theme.of(context).brightness),
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -489,7 +490,7 @@ class _StoreRow extends StatelessWidget {
       subtitle: Text(AppStrings.visitCount(store.visitCount, lang)),
       trailing: Text(
         '${store.amount.toStringAsFixed(2)} AZN',
-        style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1B5E20)),
+        style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryGreen(Theme.of(context).brightness)),
       ),
     );
   }
@@ -523,13 +524,13 @@ class _ProductRow extends StatelessWidget {
         radius: 16,
         backgroundColor: byQuantity
             ? const Color(0xFF2196F3).withValues(alpha: 0.15)
-            : const Color(0xFF1B5E20).withValues(alpha: 0.15),
+            : AppColors.primaryGreen(Theme.of(context).brightness).withValues(alpha: 0.15),
         child: Text(
           '$rank',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,
-            color: byQuantity ? const Color(0xFF2196F3) : const Color(0xFF1B5E20),
+            color: byQuantity ? Color(0xFF2196F3) : AppColors.primaryGreen(Theme.of(context).brightness),
           ),
         ),
       ),
@@ -540,7 +541,7 @@ class _ProductRow extends StatelessWidget {
         style: TextStyle(
           fontWeight: FontWeight.bold,
           fontSize: 13,
-          color: byQuantity ? const Color(0xFF2196F3) : const Color(0xFF1B5E20),
+          color: byQuantity ? Color(0xFF2196F3) : AppColors.primaryGreen(Theme.of(context).brightness),
         ),
       ),
     );
@@ -565,7 +566,7 @@ class _CategoryItemRow extends StatelessWidget {
       ),
       trailing: Text(
         '${item.amount.toStringAsFixed(2)} AZN',
-        style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF1B5E20)),
+        style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.primaryGreen(Theme.of(context).brightness)),
       ),
     );
   }

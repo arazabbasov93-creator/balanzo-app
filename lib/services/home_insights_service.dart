@@ -3,7 +3,6 @@ import '../models/home_insights.dart';
 import 'category_service.dart';
 import 'receipt_service.dart';
 import 'user_profile_service.dart';
-import '../l10n/app_strings.dart';
 
 class HomeInsightsService {
   static ({int month, int year, bool fallback}) resolveAnalysisPeriod(
@@ -140,6 +139,7 @@ class HomeInsightsService {
     double lastYearSameMonthTotal = 0;
     final receiptDates = <String, DateTime>{};
     final receiptStores = <String, String>{};
+    final periodCurrencies = <String?>{};
 
     for (final r in rows) {
       final date = _parseDate(r['purchase_date']);
@@ -167,6 +167,8 @@ class HomeInsightsService {
           receiptsInPeriod++;
           storeTotals[store] = (storeTotals[store] ?? 0) + total;
           storeVisits[store] = (storeVisits[store] ?? 0) + 1;
+          final cur = (r['currency'] as String?)?.trim();
+          periodCurrencies.add(cur == null || cur.isEmpty ? null : cur);
           if (id != null) {
             periodReceiptIds.add(id);
             storeByReceiptId[id] = store;
@@ -248,6 +250,9 @@ class HomeInsightsService {
       locale,
     );
 
+    final periodCurrency =
+        periodCurrencies.length == 1 ? periodCurrencies.first : null;
+
     return HomeInsights(
       thisMonthTotal: periodTotal,
       lastMonthTotal: prevPeriodTotal,
@@ -285,6 +290,7 @@ class HomeInsightsService {
       showWeekComparison: showWeekComparison,
       receiptsLastMonth: receiptsLastMonth,
       familyMode: familyMode,
+      periodCurrency: periodCurrency,
     );
   }
 
@@ -372,7 +378,7 @@ class HomeInsightsService {
       final rawName = c?.name ?? (e.key == '_other' ? 'Other' : e.key);
       return CategorySpend(
         key: e.key,
-        name: AppStrings.categoryName(rawName, locale),
+        name: rawName,
         icon: c?.icon ?? 'category',
         color: c?.color ?? 0xFF9E9E9E,
         amount: e.value,

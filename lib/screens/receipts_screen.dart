@@ -6,6 +6,8 @@ import '../services/family_service.dart';
 import '../models/receipt.dart';
 import '../widgets/add_receipt_sheet.dart';
 import 'receipt_detail_screen.dart';
+import '../config/app_colors.dart';
+import '../utils/currency_data.dart';
 
 class ReceiptsScreen extends StatefulWidget {
   final bool isActive;
@@ -177,10 +179,10 @@ class _ReceiptsScreenState extends State<ReceiptsScreen>
             children: [
               TabBar(
                 controller: _tabCtrl,
-                labelColor: const Color(0xFF1B5E20),
+                labelColor: AppColors.primaryGreenDark,
                 unselectedLabelColor:
                     Theme.of(context).colorScheme.onSurfaceVariant,
-                indicatorColor: const Color(0xFF1B5E20),
+                indicatorColor: AppColors.primaryGreenDark,
                 tabs: [
                   Tab(text: AppStrings.get('tab_personal', lang)),
                   Tab(text: AppStrings.get('tab_family', lang)),
@@ -217,7 +219,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen>
                         Theme.of(context).colorScheme.surfaceContainerHighest,
                     contentPadding: const EdgeInsets.symmetric(vertical: 8),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
                     ),
                   ),
@@ -254,8 +256,8 @@ class _ReceiptsScreenState extends State<ReceiptsScreen>
       ),
       floatingActionButton: _canScanReceipt
           ? FloatingActionButton.extended(
+              heroTag: 'fab_receipts_add_receipt',
               onPressed: () => showAddReceiptSheet(context, onDone: refresh),
-              backgroundColor: const Color(0xFF1B5E20),
               icon: const Icon(Icons.add, color: Colors.white),
               label: Text(
                 AppStrings.get('add_receipt', lang),
@@ -354,7 +356,7 @@ class _ReceiptListBody extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               AppStrings.get('failed_to_load', currentLanguage.value),
-              style: const TextStyle(color: Color(0xFF8888A0)),
+              style: const TextStyle(color: AppColors.darkOnSurfaceVariant),
             ),
             const SizedBox(height: 12),
             OutlinedButton(
@@ -470,13 +472,13 @@ class _EmptyState extends StatelessWidget {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: const Color(0xFF1E2F1E),
-              borderRadius: BorderRadius.circular(20),
+              color: AppColors.tintSurfaceDark,
+              borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
               hasSearch ? Icons.search_off : Icons.receipt_long,
               size: 44,
-              color: const Color(0xFF1B5E20),
+              color: AppColors.primaryGreenDark,
             ),
           ),
           const SizedBox(height: 20),
@@ -514,7 +516,7 @@ class _ReceiptCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = row['store_name'] as String? ?? 'Unknown Store';
     final total = (row['total_amount'] as num?)?.toDouble() ?? 0.0;
-    const currency = 'AZN';
+    final currency = row['currency'] as String?;
     final dateStr = row['purchase_date'] as String?;
     final date = dateStr != null ? DateTime.tryParse(dateStr) : null;
     final id = row['id'] as String;
@@ -535,11 +537,11 @@ class _ReceiptCard extends StatelessWidget {
       elevation: 0,
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: Theme.of(context).dividerColor),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         onTap: () => Navigator.of(context)
             .push(MaterialPageRoute(
               builder: (_) =>
@@ -554,12 +556,12 @@ class _ReceiptCard extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE8F5E9),
-                  borderRadius: BorderRadius.circular(10),
+                  color: AppColors.green100,
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
                   Icons.receipt_long,
-                  color: Color(0xFF1B5E20),
+                  color: AppColors.primaryGreenDark,
                   size: 22,
                 ),
               ),
@@ -584,7 +586,7 @@ class _ReceiptCard extends StatelessWidget {
                             const Icon(
                               Icons.verified_outlined,
                               size: 12,
-                              color: Color(0xFF1B5E20),
+                              color: AppColors.primaryGreenDark,
                             ),
                             const SizedBox(width: 4),
                             const Expanded(
@@ -592,7 +594,7 @@ class _ReceiptCard extends StatelessWidget {
                                 'e-kassa',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: Color(0xFF1B5E20),
+                                  color: AppColors.primaryGreenDark,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -604,11 +606,11 @@ class _ReceiptCard extends StatelessWidget {
                 ),
               ),
               Text(
-                '${total.toStringAsFixed(2)} $currency',
+                formatMoney(total, currency),
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF1B5E20),
+                  color: AppColors.primaryGreenDark,
                 ),
               ),
             ],

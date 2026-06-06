@@ -17,9 +17,21 @@ class Category {
         id: json['id'] as String,
         name: json['name'] as String,
         icon: json['icon'] as String? ?? 'category',
-        color: json['color'] as int? ?? 0xFF9E9E9E,
+        color: _colorFromJson(json['color']),
         isDefault: json['is_default'] as bool? ?? false,
       );
+
+  static int _colorFromJson(Object? value) {
+    if (value == null) return 0xFF9E9E9E;
+    if (value is int) return value;
+    if (value is String) {
+      var hex = value.trim();
+      if (hex.startsWith('#')) hex = hex.substring(1);
+      hex = 'FF$hex';
+      return int.parse(hex, radix: 16);
+    }
+    return 0xFF9E9E9E;
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,

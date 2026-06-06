@@ -1,10 +1,11 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../app_state.dart';
 import 'auth_service.dart';
+import 'supabase_access.dart';
 
 /// Keeps display name warm so Home greeting never flashes "User".
 class UserProfileService {
-  static final _db = Supabase.instance.client;
+  static SupabaseClient? get _db => SupabaseAccess.clientOrNull;
 
   static String? _nameFromAuth() {
     final user = AuthService.currentUser;
@@ -27,9 +28,10 @@ class UserProfileService {
   static Future<String?> loadFullName({bool refreshCache = true}) async {
     warmCache();
     try {
-      final userId = _db.auth.currentUser?.id;
-      if (userId != null) {
-        final row = await _db
+      final db = _db;
+      final userId = db?.auth.currentUser?.id;
+      if (userId != null && db != null) {
+        final row = await db
             .from('users')
             .select('full_name')
             .eq('id', userId)

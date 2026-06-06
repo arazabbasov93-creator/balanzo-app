@@ -6,6 +6,7 @@ import '../models/receipt.dart';
 import 'receipt_result_sheet.dart';
 import 'receipt_save_success_screen.dart';
 import 'ekassa_qr_screen.dart';
+import '../config/app_colors.dart';
 
 class FiscalIdScreen extends StatefulWidget {
   const FiscalIdScreen({super.key});
@@ -88,13 +89,12 @@ class _FiscalIdScreenState extends State<FiscalIdScreen> {
   Widget build(BuildContext context) {
     final lang = currentLanguage.value;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppColors.scaffoldDark : AppColors.scaffoldLight,
       appBar: AppBar(
         title: Text(
           AppStrings.get('enter_fiscal_id', lang),
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: const Color(0xFF1B5E20),
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -108,13 +108,13 @@ class _FiscalIdScreenState extends State<FiscalIdScreen> {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: const Color(0xFFE8F5E9),
-                borderRadius: BorderRadius.circular(18),
+                color: AppColors.green100,
+                borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
                 Icons.receipt_long_outlined,
                 size: 40,
-                color: Color(0xFF1B5E20),
+                color: AppColors.primaryGreenDark,
               ),
             ),
             const SizedBox(height: 24),
@@ -139,7 +139,7 @@ class _FiscalIdScreenState extends State<FiscalIdScreen> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF1B5E20), width: 2),
+                  borderSide: const BorderSide(color: AppColors.primaryGreenDark, width: 2),
                 ),
                 contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16, vertical: 16),
@@ -181,7 +181,9 @@ class _FiscalIdScreenState extends State<FiscalIdScreen> {
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1B5E20),
+                  backgroundColor: AppColors.primaryGreen(
+                    Theme.of(context).brightness,
+                  ),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
@@ -208,20 +210,20 @@ class _EkassaNote extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFE8F5E9),
+        color: AppColors.green100,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.verified_outlined, color: Color(0xFF1B5E20), size: 20),
+          const Icon(Icons.verified_outlined, color: AppColors.primaryGreenDark, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               AppStrings.get('fiscal_ekassa_note', lang),
               style: const TextStyle(
                 fontSize: 12,
-                color: Color(0xFF1B5E20),
+                color: AppColors.primaryGreenDark,
                 height: 1.5,
               ),
             ),

@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/category.dart';
+import 'supabase_access.dart';
 
 class CategoryService {
-  static final _db = Supabase.instance.client;
-  static String? get _userId => _db.auth.currentUser?.id;
+  static SupabaseClient get _db => SupabaseAccess.client;
+  static String? get _userId => SupabaseAccess.currentUserId;
 
   static List<Category> _cache = [];
 
@@ -17,7 +19,8 @@ class CategoryService {
       if (_cache.isEmpty && _userId != null) {
         _cache = await _fetchGlobals();
       }
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[CategoryService] refreshCache failed: $e\n$st');
       _cache = [];
     }
     return cached;
@@ -67,7 +70,8 @@ class CategoryService {
           .maybeSingle();
       if (row == null) return null;
       return Category.fromJson(row);
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[CategoryService] findGlobalByName failed: $e\n$st');
       return null;
     }
   }
@@ -95,7 +99,8 @@ class CategoryService {
       final cat = Category.fromJson(row);
       _cache = [..._cache, cat]..sort((a, b) => a.name.compareTo(b.name));
       return cat;
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[CategoryService] create failed: $e\n$st');
       return null;
     }
   }
@@ -104,6 +109,8 @@ class CategoryService {
     try {
       await _db.from('categories').delete().eq('id', id);
       _cache = _cache.where((c) => c.id != id).toList();
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('[CategoryService] delete failed: $e\n$st');
+    }
   }
 }

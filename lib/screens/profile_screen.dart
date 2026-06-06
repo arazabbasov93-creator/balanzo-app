@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/supabase_access.dart';
 import '../app_state.dart';
 import '../l10n/app_strings.dart';
 import '../services/auth_service.dart';
@@ -17,6 +18,8 @@ import 'categories_screen.dart';
 import 'family_screen.dart';
 import 'legal_screen.dart';
 import 'share_screen.dart';
+import '../config/app_colors.dart';
+import '../widgets/language_picker_tile.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -91,7 +94,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (picked == null || !mounted) return;
     setState(() => _loading = true);
     try {
-      final supabase = Supabase.instance.client;
+      final supabase = SupabaseAccess.client;
       final userId = supabase.auth.currentUser?.id;
       if (userId == null) return;
       final bytes = await picked.readAsBytes();
@@ -180,7 +183,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _deleteAllUserData() async {
-    final supabase = Supabase.instance.client;
+    final supabase = SupabaseAccess.client;
     final userId = supabase.auth.currentUser?.id;
     if (userId == null) return;
 
@@ -236,10 +239,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     children: [
                       CircleAvatar(
                         radius: 32,
-                        backgroundColor: const Color(0xFF1E2F1E),
+                        backgroundColor: AppColors.tintSurfaceDark,
                         backgroundImage: avatar != null ? NetworkImage(avatar) : null,
                         child: avatar == null
-                            ? Text(initial, style: const TextStyle(color: Color(0xFF1B5E20), fontSize: 24, fontWeight: FontWeight.bold))
+                            ? Text(initial, style: const TextStyle(color: AppColors.primaryGreenDark, fontSize: 24, fontWeight: FontWeight.bold))
                             : null,
                       ),
                       Positioned(
@@ -252,7 +255,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             color: Color(0xFFAAFF45),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.camera_alt, color: Color(0xFF09090B), size: 16),
+                          child: const Icon(Icons.camera_alt, color: AppColors.darkSurface, size: 16),
                         ),
                       ),
                     ],
@@ -270,7 +273,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                         decoration: BoxDecoration(
-                          color: _tier == SubscriptionTier.free ? const Color(0xFF1E1E24) : const Color(0xFF1E2F1E),
+                          color: _tier == SubscriptionTier.free ? const Color(0xFF1E1E24) : AppColors.tintSurfaceDark,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
@@ -278,7 +281,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: _tier == SubscriptionTier.free ? const Color(0xFF8888A0) : const Color(0xFF4CAF50),
+                            color: _tier == SubscriptionTier.free ? AppColors.darkOnSurfaceVariant : AppColors.green400,
                           ),
                         ),
                       ),
@@ -292,65 +295,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           // Language + Notifications
           _Section(title: AppStrings.get('preferences', _language), children: [
-            _Tile(
-              icon: Icons.language,
+            LanguagePickerTile(
               label: AppStrings.get('language', _language),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: ['EN', 'AZ', 'RU'].map((display) {
-                  final langCode = display.toLowerCase();
-                  return GestureDetector(
-                    onTap: () => _setLanguage(langCode),
-                    child: Container(
-                      margin: const EdgeInsets.only(left: 4),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _language == langCode
-                            ? const Color(0xFF1B5E20)
-                            : Theme.of(context).colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Theme.of(context).dividerColor),
-                      ),
-                      child: Text(
-                        display,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: _language == langCode
-                              ? Colors.white
-                              : Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
+              selectedCode: _language,
+              onSelected: _setLanguage,
+            ),
+            ListTile(
+              tileColor: Colors.transparent,
+              leading: SizedBox(
+                width: 24,
+                height: 24,
+                child: Icon(Icons.notifications_outlined,
+                    color: AppColors.primaryGreenDark, size: 24),
+              ),
+              title: Text(
+                AppStrings.get('notifications', _language),
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+              trailing: Switch(
+                value: _notificationsEnabled,
+                onChanged: _toggleNotifications,
+                activeThumbColor: AppColors.primaryGreenDark,
               ),
             ),
-            SwitchListTile(
-              value: _notificationsEnabled,
-              onChanged: _toggleNotifications,
-              title: Row(
-                children: [
-                  Icon(Icons.notifications_outlined, color: const Color(0xFF8888A0), size: 20),
-                  const SizedBox(width: 12),
-                  Text(AppStrings.get('notifications', _language), style: TextStyle(fontSize: 15, color: Theme.of(context).colorScheme.onSurface)),
-                ],
+            ListTile(
+              tileColor: Colors.transparent,
+              leading: SizedBox(
+                width: 24,
+                height: 24,
+                child: Icon(
+                  _isDarkMode ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
+                  color: AppColors.primaryGreenDark,
+                  size: 24,
+                ),
               ),
-              activeThumbColor: const Color(0xFF1B5E20),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-            ),
-            SwitchListTile(
-              value: _isDarkMode,
-              onChanged: _toggleDarkMode,
-              title: Row(
-                children: [
-                  Icon(_isDarkMode ? Icons.dark_mode_outlined : Icons.light_mode_outlined, color: const Color(0xFF8888A0), size: 20),
-                  const SizedBox(width: 12),
-                  Text(_themeModeLabel(), style: TextStyle(fontSize: 15, color: Theme.of(context).colorScheme.onSurface)),
-                ],
+              title: Text(
+                _themeModeLabel(),
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
               ),
-              activeThumbColor: const Color(0xFF1B5E20),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+              trailing: Switch(
+                value: _isDarkMode,
+                onChanged: _toggleDarkMode,
+                activeThumbColor: AppColors.primaryGreenDark,
+              ),
             ),
           ]),
 
@@ -370,7 +363,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   children: [
                     const Icon(Icons.workspace_premium, color: Color(0xFFFFD040), size: 20),
                     const SizedBox(width: 12),
-                    Text('${_tierLabel()} Active', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: Color(0xFFF2F2F5))),
+                    Text('${_tierLabel()} Active', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.darkOnSurface)),
                     const Spacer(),
                     TextButton(
                       onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const UpgradeScreen())),
@@ -485,7 +478,7 @@ class _Section extends StatelessWidget {
         Container(
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Theme.of(context).dividerColor),
           ),
           child: Column(children: children),
@@ -502,7 +495,6 @@ class _Tile extends StatelessWidget {
   final VoidCallback? onTap;
   final Color? textColor;
   final Color? iconColor;
-  final Widget? trailing;
 
   const _Tile({
     required this.icon,
@@ -510,19 +502,19 @@ class _Tile extends StatelessWidget {
     this.onTap,
     this.textColor,
     this.iconColor,
-    this.trailing,
   });
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
+      tileColor: Colors.transparent,
       leading: SizedBox(
         width: 24,
         height: 24,
-        child: Icon(icon, color: iconColor ?? const Color(0xFF1B5E20), size: 24),
+        child: Icon(icon, color: iconColor ?? AppColors.primaryGreenDark, size: 24),
       ),
       title: Text(label, style: TextStyle(fontSize: 15, color: textColor ?? Theme.of(context).colorScheme.onSurface)),
-      trailing: trailing ?? (onTap != null ? Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 18) : null),
+      trailing: onTap != null ? Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 18) : null,
       onTap: onTap,
       visualDensity: VisualDensity.standard,
     );

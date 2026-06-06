@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../config/app_colors.dart';
 
 /// Tap-to-copy row for an e-kassa fiscal document ID.
 class CopyableFiscalIdRow extends StatelessWidget {
@@ -12,9 +13,9 @@ class CopyableFiscalIdRow extends StatelessWidget {
     this.compact = false,
   });
 
-  static const _green = Color(0xFF1B5E20);
-  static const _greenDark = Color(0xFF0D2818);
-  static const _bg = Color(0xFFDCEEDC);
+  static const _green = AppColors.primaryGreenDark;
+  static const _greenDark = AppColors.primaryGreenDark;
+  static const _bg = AppColors.tintSurfaceLight;
 
   void _copy(BuildContext context) {
     Clipboard.setData(ClipboardData(text: fiscalId));

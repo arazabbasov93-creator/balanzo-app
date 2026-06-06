@@ -143,6 +143,7 @@ class HomeInsights {
   final bool showWeekComparison;
   final int receiptsLastMonth;
   final bool familyMode;
+  final String? periodCurrency;
 
   const HomeInsights({
     required this.thisMonthTotal,
@@ -176,6 +177,7 @@ class HomeInsights {
     this.showWeekComparison = true,
     this.receiptsLastMonth = 0,
     this.familyMode = false,
+    this.periodCurrency,
   });
 
   CategorySpend? get topCategory =>

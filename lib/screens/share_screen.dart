@@ -4,6 +4,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import '../services/receipt_service.dart';
+import '../config/app_colors.dart';
 
 class ShareScreen extends StatefulWidget {
   const ShareScreen({super.key});
@@ -36,20 +37,21 @@ class _ShareScreenState extends State<ShareScreen> {
       double spend = 0;
       int count = 0;
       for (final r in rows) {
-        final dateStr = r['date'] as String?;
+        final dateStr = r['purchase_date'] as String?;
         final date = dateStr != null ? DateTime.tryParse(dateStr) : null;
         if (date != null && date.year == now.year && date.month == now.month) {
-          spend += (r['total'] as num?)?.toDouble() ?? 0;
+          spend += (r['total_amount'] as num?)?.toDouble() ?? 0;
           count++;
         }
       }
+      if (!mounted) return;
       setState(() {
         _totalSpend = spend;
         _receiptCount = count;
         _loading = false;
       });
     } catch (_) {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -67,10 +69,9 @@ class _ShareScreenState extends State<ShareScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppColors.scaffoldDark : AppColors.scaffoldLight,
       appBar: AppBar(
         title: const Text('Share Stats', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1B5E20),
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -114,11 +115,13 @@ class _ShareScreenState extends State<ShareScreen> {
                           icon: const Icon(Icons.share),
                           label: const Text('Share'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1B5E20),
+                            backgroundColor: AppColors.primaryGreen(
+                              Theme.of(context).brightness,
+                            ),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
                         ),
@@ -159,14 +162,14 @@ class _Chip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF1B5E20) : Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFF1B5E20)),
+          color: selected ? AppColors.primaryGreenDark : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.primaryGreenDark),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: selected ? Colors.white : const Color(0xFF1B5E20),
+            color: selected ? Colors.white : AppColors.primaryGreenDark,
             fontWeight: FontWeight.w600,
             fontSize: 13,
           ),
@@ -189,12 +192,15 @@ class _MonthlySpendCard extends StatelessWidget {
       width: 320,
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.primaryGreen(Theme.of(context).brightness),
+            AppColors.gradientEnd(Theme.of(context).brightness),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF1B5E20), Color(0xFF4CAF50)],
         ),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 20, offset: const Offset(0, 8)),
         ],
@@ -208,7 +214,7 @@ class _MonthlySpendCard extends StatelessWidget {
               const Text('BALANZO', style: TextStyle(color: Colors.white70, fontSize: 11, letterSpacing: 2, fontWeight: FontWeight.w600)),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)),
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
                 child: const Text('Monthly Spend', style: TextStyle(color: Colors.white, fontSize: 11)),
               ),
             ],
@@ -245,12 +251,15 @@ class _VatCard extends StatelessWidget {
       width: 320,
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.primaryGreen(Theme.of(context).brightness),
+            AppColors.gradientEnd(Theme.of(context).brightness),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
         ),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 20, offset: const Offset(0, 8)),
         ],
@@ -264,7 +273,7 @@ class _VatCard extends StatelessWidget {
               const Text('BALANZO', style: TextStyle(color: Colors.white70, fontSize: 11, letterSpacing: 2, fontWeight: FontWeight.w600)),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)),
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
                 child: const Text('VAT Tracked', style: TextStyle(color: Colors.white, fontSize: 11)),
               ),
             ],
@@ -299,12 +308,15 @@ class _InflationCard extends StatelessWidget {
       width: 320,
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.primaryGreen(Theme.of(context).brightness),
+            AppColors.gradientEnd(Theme.of(context).brightness),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF6A1B9A), Color(0xFFAB47BC)],
         ),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 20, offset: const Offset(0, 8)),
         ],
@@ -318,7 +330,7 @@ class _InflationCard extends StatelessWidget {
               const Text('BALANZO', style: TextStyle(color: Colors.white70, fontSize: 11, letterSpacing: 2, fontWeight: FontWeight.w600)),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)),
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
                 child: const Text('Inflation Tracker', style: TextStyle(color: Colors.white, fontSize: 11)),
               ),
             ],

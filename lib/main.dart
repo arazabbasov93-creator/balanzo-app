@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 // UI CONTRACT: Never use opacity below Colors.black54 on white/light backgrounds.
@@ -8,12 +9,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'app_state.dart';
-import 'screens/splash_screen.dart';
+import 'diag_log.dart';
+import 'screens/age_gate_screen.dart';
 import 'screens/auth_gate_screen.dart';
-import 'services/notification_service.dart';
 import 'services/user_profile_service.dart';
 
 Future<void> _initializeServices() async {
+  _initFirebaseInBackground();
+
   try {
     debugPrint('[INIT] Supabase.initialize() starting...');
     await Supabase.initialize(
@@ -21,108 +24,113 @@ Future<void> _initializeServices() async {
       anonKey:
           'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13b29rZ2hubGhtc2VheWV5eWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzNzMyMjEsImV4cCI6MjA5NDk0OTIyMX0.lTcGXJ2u5V_jJTzwDQFagCmLE7cRrrRcCPpuAM6E-d8',
     ).timeout(const Duration(seconds: 15));
+    supabaseReady = true;
+    supabaseReadyNotifier.value = true;
     debugPrint('[INIT] Supabase.initialize() OK');
   } catch (e, st) {
     debugPrint('[INIT] Supabase.initialize() FAILED: $e\n$st');
   }
 
   try {
-    debugPrint('[INIT] Firebase.initializeApp() starting...');
-    await Firebase.initializeApp().timeout(const Duration(seconds: 15));
-    FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
-    PlatformDispatcher.instance.onError = (error, stack) {
-      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-      return true;
-    };
-    debugPrint('[INIT] Firebase.initializeApp() OK');
-  } catch (e, st) {
-    debugPrint('[INIT] Firebase.initializeApp() FAILED: $e\n$st');
-  }
-
-  try {
-    debugPrint('[INIT] NotificationService.init() starting...');
-    await NotificationService.init().timeout(const Duration(seconds: 10));
-    debugPrint('[INIT] NotificationService.init() OK');
-  } catch (e, st) {
-    debugPrint('[INIT] NotificationService.init() FAILED: $e\n$st');
-  }
-
-  try {
     UserProfileService.warmCache();
   } catch (_) {}
 
+  if (supabaseReady) {
+    unawaited(UserProfileService.loadFullName());
+  }
+
   try {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance()
+        .timeout(const Duration(seconds: 5));
     currentLanguage.value = prefs.getString('app_language') ?? 'en';
     final themePref = prefs.getString('theme_mode') ?? 'light';
     currentThemeMode.value = themePref == 'dark' ? ThemeMode.dark : ThemeMode.light;
   } catch (_) {}
 }
 
-void main() {
-  debugPrint('[INIT] WidgetsFlutterBinding.ensureInitialized()');
-  WidgetsFlutterBinding.ensureInitialized();
-  debugPrint('[INIT] runApp() called');
-  runApp(const AppBootstrap());
+void _initFirebaseInBackground() {
+  unawaited(Future(() async {
+    try {
+      debugPrint('[INIT] Firebase.initializeApp() starting...');
+      await Firebase.initializeApp().timeout(const Duration(seconds: 15));
+      FlutterError.onError = (details) {
+        FirebaseCrashlytics.instance.recordFlutterError(details, fatal: false);
+      };
+      PlatformDispatcher.instance.onError = (error, stack) {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: false);
+        return true;
+      };
+      debugPrint('[INIT] Firebase.initializeApp() OK');
+    } catch (e, st) {
+      debugPrint('[INIT] Firebase.initializeApp() FAILED: $e\n$st');
+    }
+  }));
 }
 
-/// Shows UI immediately so iOS never sits on a blank white storyboard while
-/// Firebase/Supabase/notifications initialize on a background isolate.
-class AppBootstrap extends StatefulWidget {
-  const AppBootstrap({super.key});
+void main() {
+  diag('main() enter');
+  WidgetsFlutterBinding.ensureInitialized();
+  diag('main() runApp');
+  runApp(const BalanzoApp());
+}
+
+/// Picks age gate vs auth without a blocking green splash.
+class _AppEntry extends StatefulWidget {
+  const _AppEntry();
 
   @override
-  State<AppBootstrap> createState() => _AppBootstrapState();
+  State<_AppEntry> createState() => _AppEntryState();
 }
 
-class _AppBootstrapState extends State<AppBootstrap> {
-  bool _ready = false;
+class _AppEntryState extends State<_AppEntry> {
+  bool? _ageConfirmed;
 
   @override
   void initState() {
     super.initState();
-    _initializeServices().whenComplete(() {
-      if (mounted) setState(() => _ready = true);
+    diag('AppEntry.initState');
+    _resolveAgeGate();
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted && _ageConfirmed == null) {
+        debugPrint('[INIT] AppEntry age-gate fallback timeout');
+        setState(() => _ageConfirmed = false);
+      }
     });
   }
 
+  Future<void> _resolveAgeGate() async {
+    var confirmed = false;
+    try {
+      final prefs = await SharedPreferences.getInstance()
+          .timeout(const Duration(seconds: 2));
+      confirmed = prefs.getBool('age_gate_confirmed') ?? false;
+    } catch (_) {}
+    if (mounted) {
+      debugPrint('[INIT] AppEntry ageConfirmed=$confirmed');
+      setState(() => _ageConfirmed = confirmed);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (!_ready) {
-      return const MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: _StartupSplash(),
+    if (_ageConfirmed == null) {
+      diag('AppEntry.build loading');
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: Color(0xFF1B5E20)),
+              SizedBox(height: 16),
+              Text('Loading Balanzo…', style: TextStyle(color: Colors.black87)),
+            ],
+          ),
+        ),
       );
     }
-    return const BalanzoApp();
-  }
-}
-
-class _StartupSplash extends StatelessWidget {
-  const _StartupSplash();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Color(0xFF1B5E20),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.account_balance_wallet, color: Colors.white, size: 56),
-            SizedBox(height: 24),
-            Text(
-              'Balanzo',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 40,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    diag('AppEntry.build route', _ageConfirmed! ? 'AuthGate' : 'AgeGate');
+    return _ageConfirmed! ? const AuthGateScreen() : const AgeGateScreen();
   }
 }
 
@@ -137,6 +145,15 @@ class _BalanzoAppState extends State<BalanzoApp> {
   static const _navLabelStyle = NavigationBarThemeData(
     labelTextStyle: WidgetStatePropertyAll(TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
   );
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      debugPrint('[INIT] postFrame — starting background services');
+      unawaited(_initializeServices());
+    });
+  }
 
   ThemeData get _darkTheme => ThemeData(
         brightness: Brightness.dark,
@@ -210,7 +227,7 @@ class _BalanzoAppState extends State<BalanzoApp> {
           theme: _lightTheme,
           darkTheme: _darkTheme,
           themeMode: themeMode,
-          home: const SplashScreen(),
+          home: const _AppEntry(),
           onUnknownRoute: (settings) =>
               MaterialPageRoute(builder: (_) => const AuthGateScreen()),
         ),
@@ -218,4 +235,3 @@ class _BalanzoAppState extends State<BalanzoApp> {
     );
   }
 }
-

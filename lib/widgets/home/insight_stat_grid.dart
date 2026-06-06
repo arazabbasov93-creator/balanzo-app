@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../app_state.dart';
 import '../../l10n/app_strings.dart';
 import '../../models/home_insights.dart';
+import '../../config/app_colors.dart';
+import '../../utils/currency_data.dart';
 
 class InsightStatGrid extends StatelessWidget {
   final HomeInsights insights;
@@ -15,8 +17,8 @@ class InsightStatGrid extends StatelessWidget {
       (
         icon: Icons.receipt_outlined,
         label: AppStrings.get('dash_avg_receipt', lang),
-        value: '${insights.avgReceiptAmount.toStringAsFixed(2)} AZN',
-        color: const Color(0xFF1B5E20),
+        value: formatMoney(insights.avgReceiptAmount, insights.periodCurrency),
+        color: AppColors.primaryGreen(Theme.of(context).brightness),
       ),
       (
         icon: Icons.storefront_outlined,

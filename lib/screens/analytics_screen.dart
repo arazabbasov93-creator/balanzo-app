@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/receipt_service.dart';
+import '../config/app_colors.dart';
 
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key});
@@ -34,8 +35,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     }
 
     for (final r in rows) {
-      final dateStr = r['date'] as String?;
-      final total = (r['total'] as num?)?.toDouble() ?? 0.0;
+      final dateStr = r['purchase_date'] as String?;
+      final total = (r['total_amount'] as num?)?.toDouble() ?? 0.0;
       allTime += total;
       if (dateStr != null) {
         final date = DateTime.tryParse(dateStr);
@@ -62,10 +63,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppColors.scaffoldDark : AppColors.scaffoldLight,
       appBar: AppBar(
         title: const Text('Analytics', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1B5E20),
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -171,21 +171,21 @@ class _MetricCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        color: AppColors.card(Theme.of(context).brightness),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade200),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: const Color(0xFF1B5E20), size: 22),
+          Icon(icon, color: AppColors.primaryGreenDark, size: 22),
           const SizedBox(height: 10),
           Text(
             value,
             style: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF1B5E20),
+              color: AppColors.primaryGreenDark,
             ),
           ),
           const SizedBox(height: 2),
@@ -215,8 +215,8 @@ class _BarChart extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        color: AppColors.card(Theme.of(context).brightness),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade200),
       ),
       child: Column(
@@ -249,8 +249,8 @@ class _BarChart extends StatelessWidget {
                           height: (fraction * 120).clamp(4.0, 120.0),
                           decoration: BoxDecoration(
                             color: isCurrentMonth
-                                ? const Color(0xFF1B5E20)
-                                : const Color(0xFF81C784),
+                                ? AppColors.primaryGreenDark
+                                : AppColors.green300,
                             borderRadius: const BorderRadius.vertical(
                               top: Radius.circular(4),
                             ),
@@ -275,7 +275,7 @@ class _BarChart extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 10,
                         color: k == monthlyTotals.keys.last
-                            ? const Color(0xFF1B5E20)
+                            ? AppColors.primaryGreenDark
                             : Colors.black54,
                         fontWeight: k == monthlyTotals.keys.last
                             ? FontWeight.bold

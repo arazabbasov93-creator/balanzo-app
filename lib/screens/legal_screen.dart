@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config/app_colors.dart';
 
 enum LegalType { privacy, terms }
 
@@ -10,13 +11,12 @@ class LegalScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final isPrivacy = type == LegalType.privacy;
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppColors.scaffoldDark : AppColors.scaffoldLight,
       appBar: AppBar(
         title: Text(
           isPrivacy ? 'Privacy Policy' : 'Terms of Service',
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: const Color(0xFF1B5E20),
         foregroundColor: Colors.white,
         elevation: 0,
       ),

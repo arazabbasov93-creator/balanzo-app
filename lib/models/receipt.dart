@@ -58,7 +58,7 @@ class Receipt {
   final double? serviceCharge;
   final double vat;
   final double total;
-  final String currency;
+  final String? currency;
   final bool isGovernmentVerified;
   final String? documentId; // e-kassa fiscal document ID
 
@@ -70,7 +70,7 @@ class Receipt {
     this.serviceCharge,
     required this.vat,
     required this.total,
-    this.currency = 'AZN',
+    this.currency,
     this.isGovernmentVerified = false,
     this.documentId,
   });
@@ -89,8 +89,14 @@ class Receipt {
             : null,
         vat: (json['vat'] as num?)?.toDouble() ?? 0.0,
         total: (json['total'] as num?)?.toDouble() ?? 0.0,
-        currency: json['currency'] as String? ?? 'AZN',
+        currency: _parseCurrency(json['currency']),
       );
+
+  static String? _parseCurrency(dynamic value) {
+    if (value == null) return null;
+    final s = value.toString().trim();
+    return s.isEmpty ? null : s;
+  }
 
   Map<String, dynamic> toJson() => {
         'store': store,

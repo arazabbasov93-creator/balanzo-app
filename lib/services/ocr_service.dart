@@ -66,6 +66,13 @@ class OcrService {
     return allLines.map((l) => l.text).join('\n');
   }
 
+  /// Stitched OCR from each image with no structure preprocessing (for AI parsing).
+  static Future<String> recognizeMultipleRaw(List<String> imagePaths) async {
+    if (imagePaths.isEmpty) return '';
+    final sections = await Future.wait(imagePaths.map(recognizeText));
+    return _stitch(sections);
+  }
+
   static Future<String> recognizeMultiple(List<String> imagePaths) async {
     if (imagePaths.isEmpty) return '';
     final sections = await Future.wait(imagePaths.map(recognizeText));

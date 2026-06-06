@@ -84,7 +84,8 @@ class ReceiptOcrPipeline {
       try {
         parsed = (await ReceiptParserService.parse(ocrText)).withCorrectedTotals();
         if (parsed.items.isEmpty) parsed = null;
-      } catch (_) {
+      } catch (e, st) {
+        debugPrint('[AI Parse] Failed: $e\n$st');
         parsed = null;
       }
     }
@@ -154,7 +155,9 @@ class ReceiptOcrPipeline {
       if (lastPrice == null || lastPrice <= 0) continue;
       if (item.unitPrice > lastPrice * 1.15) {
         final pctAbove = ((item.unitPrice - lastPrice) / lastPrice) * 100;
-        await NotificationService.sendPriceAnomaly(name, pctAbove);
+        try {
+          await NotificationService.sendPriceAnomaly(name, pctAbove);
+        } catch (_) {}
       }
     }
   }
@@ -180,7 +183,7 @@ class ReceiptOcrPipeline {
     bool isGovernmentVerified = false,
     bool requireItems = false,
   }) async {
-    final ocrText = await OcrService.recognizeMultiple(imagePaths);
+    final ocrText = await OcrService.recognizeMultipleRaw(imagePaths);
     return parseOcrText(
       ocrText,
       documentId: documentId,

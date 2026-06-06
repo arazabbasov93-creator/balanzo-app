@@ -7,9 +7,10 @@
 // Re-enable when API is available.
 
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/supabase_access.dart';
 import '../app_state.dart';
 import '../l10n/app_strings.dart';
+import '../config/app_colors.dart';
 
 class VatTrackerScreen extends StatefulWidget {
   const VatTrackerScreen({super.key});
@@ -32,7 +33,7 @@ class _VatTrackerScreenState extends State<VatTrackerScreen> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final supabase = Supabase.instance.client;
+      final supabase = SupabaseAccess.client;
       final userId = supabase.auth.currentUser?.id;
       if (userId == null) {
         setState(() => _loading = false);
@@ -81,10 +82,9 @@ class _VatTrackerScreenState extends State<VatTrackerScreen> {
     final claimed = _entries.where((e) => _claimed.contains(e.id)).toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF09090B),
+      backgroundColor: AppColors.darkSurface,
       appBar: AppBar(
         title: Text(AppStrings.get('vat_tracker', currentLanguage.value), style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1B5E20),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -126,7 +126,7 @@ class _VatTrackerScreenState extends State<VatTrackerScreen> {
                           subtitle: '${claimed.length} receipts',
                           action: TextButton(
                             onPressed: () => setState(() => _claimed.clear()),
-                            child: const Text('Clear', style: TextStyle(color: Color(0xFF8888A0))),
+                            child: const Text('Clear', style: TextStyle(color: AppColors.darkOnSurfaceVariant)),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -166,8 +166,11 @@ class _SummaryCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
+        gradient: LinearGradient(
+          colors: [
+            AppColors.primaryGreen(Theme.of(context).brightness),
+            AppColors.gradientEnd(Theme.of(context).brightness),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -220,7 +223,7 @@ class _StatChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -248,9 +251,9 @@ class _Header extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFFF2F2F5))),
+              Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.darkOnSurface)),
               if (subtitle != null)
-                Text(subtitle!, style: const TextStyle(fontSize: 12, color: Color(0xFF8888A0))),
+                Text(subtitle!, style: const TextStyle(fontSize: 12, color: AppColors.darkOnSurfaceVariant)),
             ],
           ),
         ),
@@ -270,11 +273,12 @@ class _VatCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF18181C),
+        color: AppColors.darkElevated,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.orange.shade900.withValues(alpha: 0.4)),
       ),
       child: ListTile(
+        tileColor: Colors.transparent,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         leading: Container(
           width: 40,
@@ -285,14 +289,14 @@ class _VatCard extends StatelessWidget {
           ),
           child: Icon(Icons.receipt_long_outlined, color: Colors.orange.shade400, size: 20),
         ),
-        title: Text(entry.store, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Color(0xFFF2F2F5))),
+        title: Text(entry.store, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.darkOnSurface)),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (entry.date != null)
               Text(
                 '${entry.date!.day.toString().padLeft(2, '0')}.${entry.date!.month.toString().padLeft(2, '0')}.${entry.date!.year}',
-                style: const TextStyle(fontSize: 11, color: Color(0xFF8888A0)),
+                style: const TextStyle(fontSize: 11, color: AppColors.darkOnSurfaceVariant),
               ),
             Text(
               'VAT: ${entry.vat.toStringAsFixed(2)} AZN',
@@ -303,9 +307,9 @@ class _VatCard extends StatelessWidget {
         trailing: TextButton(
           onPressed: onClaim,
           style: TextButton.styleFrom(
-            backgroundColor: const Color(0xFF1B5E20).withValues(alpha: 0.2),
-            foregroundColor: const Color(0xFF4CAF50),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            backgroundColor: AppColors.primaryGreenDark.withValues(alpha: 0.2),
+            foregroundColor: AppColors.green400,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           ),
           child: const Text('Claim', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
@@ -325,23 +329,23 @@ class _ClaimedCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF18181C),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF2C2C34)),
+        color: AppColors.darkElevated,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.darkOutline),
       ),
       child: Row(
         children: [
-          const Icon(Icons.check_circle, color: Color(0xFF1B5E20), size: 18),
+          const Icon(Icons.check_circle, color: AppColors.primaryGreenDark, size: 18),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               entry.store,
-              style: const TextStyle(color: Color(0xFF8888A0), fontSize: 14, decoration: TextDecoration.lineThrough, decorationColor: Color(0xFF8888A0)),
+              style: const TextStyle(color: AppColors.darkOnSurfaceVariant, fontSize: 14, decoration: TextDecoration.lineThrough, decorationColor: AppColors.darkOnSurfaceVariant),
             ),
           ),
           Text(
             '${entry.vat.toStringAsFixed(2)} AZN',
-            style: const TextStyle(color: Color(0xFF8888A0), fontSize: 12),
+            style: const TextStyle(color: AppColors.darkOnSurfaceVariant, fontSize: 12),
           ),
         ],
       ),
@@ -360,18 +364,18 @@ class _EmptyState extends StatelessWidget {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: const Color(0xFF1E2F1E),
-              borderRadius: BorderRadius.circular(20),
+              color: AppColors.tintSurfaceDark,
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.receipt_long_outlined, size: 44, color: Color(0xFF1B5E20)),
+            child: const Icon(Icons.receipt_long_outlined, size: 44, color: AppColors.primaryGreenDark),
           ),
           const SizedBox(height: 20),
-          Text(AppStrings.get('no_vat_data', currentLanguage.value), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFF2F2F5))),
+          Text(AppStrings.get('no_vat_data', currentLanguage.value), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.darkOnSurface)),
           const SizedBox(height: 8),
           Text(
             AppStrings.get('vat_scan_hint', currentLanguage.value),
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 14, color: Color(0xFF8888A0)),
+            style: const TextStyle(fontSize: 14, color: AppColors.darkOnSurfaceVariant),
           ),
         ],
       ),

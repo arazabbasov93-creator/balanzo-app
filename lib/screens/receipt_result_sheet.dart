@@ -14,7 +14,10 @@ import 'receipt_detail_screen.dart';
 import '../utils/icon_mapper.dart';
 import '../utils/receipt_numbers.dart';
 import '../widgets/category_picker_sheet.dart';
+import '../widgets/currency_picker_sheet.dart';
 import '../widgets/copyable_fiscal_id.dart';
+import '../utils/currency_data.dart';
+import '../config/app_colors.dart';
 
 /// Result returned when user saves from the preview sheet.
 class ReceiptSaveResult {
@@ -69,11 +72,13 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
   bool _saving = false;
   bool _saveAsFamily = false;
   bool _hasFamily = false;
+  bool _skipSoftDuplicateCheck = false;
   late Receipt _receipt;
   DateTime? _purchaseDate;
   late List<_EditItem> _editItems;
   late final TextEditingController _storeCtrl;
   List<Category> _categories = [];
+  bool _categoriesReady = false;
 
   @override
   void initState() {
@@ -99,10 +104,18 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
 
   Future<void> _checkDuplicate() async {
     final fiscalId = _receipt.documentId?.trim();
-    if (fiscalId == null || fiscalId.isEmpty) return;
-    final hit = await ReceiptService.findDuplicateByFiscalId(fiscalId);
-    if (hit != null && mounted) {
-      await _showDuplicateDialog(hit);
+    if (fiscalId != null && fiscalId.isNotEmpty) {
+      final hit = await ReceiptService.findDuplicateByFiscalId(fiscalId);
+      if (hit != null && mounted) {
+        await _showDuplicateDialog(hit);
+      }
+      return;
+    }
+    final hash = ReceiptService.generateContentHash(_buildEditedReceipt());
+    if (hash == null) return;
+    final softHit = await ReceiptService.findDuplicateByContentHash(hash);
+    if (softHit != null && mounted) {
+      await _showSoftDuplicateDialog(softHit);
     }
   }
 
@@ -121,6 +134,7 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
     );
     setState(() {
       _categories = cats;
+      _categoriesReady = true;
       for (var i = 0; i < _editItems.length && i < assigned.length; i++) {
         _editItems[i].categoryId ??= assigned[i].categoryId;
       }
@@ -203,7 +217,7 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
       lastDate: DateTime.now(),
       builder: (context, child) => Theme(
         data: ThemeData(
-          colorScheme: const ColorScheme.light(primary: Color(0xFF1B5E20)),
+          colorScheme: const ColorScheme.light(primary: AppColors.primaryGreenDark),
         ),
         child: child!,
       ),
@@ -228,6 +242,7 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
         edited,
         categories: _categories,
         saveAsFamily: _saveAsFamily,
+        skipSoftDuplicateCheck: _skipSoftDuplicateCheck,
       );
       if (!mounted) return;
       notifyReceiptsChanged();
@@ -240,6 +255,13 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
         }
         return;
       }
+      if (e is SoftDuplicateException) {
+        if (mounted) {
+          setState(() => _saving = false);
+          await _showSoftDuplicateDialog(e.hit);
+        }
+        return;
+      }
       if (mounted) {
         setState(() => _saving = false);
         final msg = e.toString().replaceFirst('Exception: ', '');
@@ -249,18 +271,28 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
           ),
           backgroundColor: Colors.red.shade700,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ));
       }
     }
   }
 
   Future<void> _pickCategory(int index) async {
-    if (_categories.isEmpty) return;
+    var cats = _categories;
+    if (cats.isEmpty) {
+      cats = List<Category>.from(CategoryService.cached);
+      if (cats.isEmpty) {
+        cats = await CategoryService.fetchAll();
+      }
+      if (mounted) {
+        setState(() => _categories = cats);
+      }
+    }
+    if (!mounted || cats.isEmpty) return;
     final edit = _editItems[index];
     final selected = await showCategoryPickerSheet(
       context,
-      categories: _categories,
+      categories: cats,
       selectedId: edit.categoryId,
     );
     if (selected != edit.categoryId && mounted) {
@@ -279,9 +311,84 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
   void _snack(String msg, {bool error = false}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
-      backgroundColor: error ? Colors.red.shade700 : const Color(0xFF1B5E20),
+      backgroundColor: error ? Colors.red.shade700 : AppColors.primaryGreenDark,
       behavior: SnackBarBehavior.floating,
     ));
+  }
+
+  Future<void> _pickCurrency() async {
+    final selected = await showCurrencyPickerSheet(
+      context,
+      initialCurrency: _receipt.currency,
+    );
+    if (!mounted) return;
+    setState(() => _receipt = Receipt(
+          store: _receipt.store,
+          date: _receipt.date,
+          items: _receipt.items,
+          subtotal: _receipt.subtotal,
+          serviceCharge: _receipt.serviceCharge,
+          vat: _receipt.vat,
+          total: _receipt.total,
+          currency: selected,
+          isGovernmentVerified: _receipt.isGovernmentVerified,
+          documentId: _receipt.documentId,
+        ));
+  }
+
+  Future<void> _showSoftDuplicateDialog(FiscalDuplicateHit hit) async {
+    final lang = currentLanguage.value;
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Text(AppStrings.get('soft_duplicate_title', lang)),
+        content: Text(
+          AppStrings.softDuplicateBody(hit.storeName, lang),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(AppStrings.get('cancel', lang)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ReceiptDetailScreen(
+                    receiptId: hit.receiptId,
+                    receipt: Receipt(
+                      store: hit.storeName,
+                      date: hit.purchaseDate != null
+                          ? DateTime.tryParse(hit.purchaseDate!)
+                          : null,
+                      items: const [],
+                      subtotal: 0,
+                      vat: 0,
+                      total: 0,
+                      currency: null,
+                      documentId: null,
+                    ),
+                  ),
+                ),
+              );
+            },
+            child: Text(AppStrings.get('view_existing', lang)),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() => _skipSoftDuplicateCheck = true);
+              _save();
+            },
+            child: Text(AppStrings.get('save_anyway', lang)),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _showDuplicateDialog(FiscalDuplicateHit hit) async {
@@ -316,7 +423,7 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                       subtotal: 0,
                       vat: 0,
                       total: 0,
-                      currency: 'AZN',
+                      currency: null,
                       documentId: null,
                     ),
                   ),
@@ -344,7 +451,7 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
       builder: (_, controller) => Container(
         decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
         ),
         child: Column(
           children: [
@@ -369,19 +476,19 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE8F5E9),
-                        borderRadius: BorderRadius.circular(20),
+                        color: AppColors.green100,
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(Icons.verified,
-                              color: Color(0xFF1B5E20), size: 16),
+                              color: AppColors.primaryGreenDark, size: 16),
                           SizedBox(width: 6),
                           Text(
                             'Government Verified · e-kassa',
                             style: TextStyle(
-                              color: Color(0xFF1B5E20),
+                              color: AppColors.primaryGreenDark,
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                             ),
@@ -440,7 +547,7 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                         ),
                         InkWell(
                           onTap: _pickPurchaseDate,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(12),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 4),
                             child: Row(
@@ -471,19 +578,50 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                     ),
                   ),
                   Text(
-                    '${_displayTotal.toStringAsFixed(2)} ${receipt.currency}',
+                    formatMoney(_displayTotal, receipt.currency),
                     style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1B5E20),
+                      color: AppColors.primaryGreenDark,
                     ),
                   ),
                 ],
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+              child: InkWell(
+                onTap: _pickCurrency,
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      Icon(Icons.payments_outlined,
+                          size: 16, color: Colors.grey.shade600),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          currencyDisplayLabel(receipt.currency),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: receipt.currency != null
+                                ? Colors.black87
+                                : Colors.orange.shade800,
+                          ),
+                        ),
+                      ),
+                      const Icon(Icons.expand_more, size: 18, color: Colors.black38),
+                    ],
+                  ),
+                ),
+              ),
+            ),
             const Divider(height: 24),
             Expanded(
-              child: _editItems.isEmpty
+              child: !_categoriesReady
+                  ? const Center(child: CircularProgressIndicator())
+                  : _editItems.isEmpty
                   ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -520,7 +658,7 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                   children: [
                     const Text('Subtotal',
                         style: TextStyle(fontSize: 13, color: Colors.black54)),
-                    Text('${receipt.subtotal.toStringAsFixed(2)} AZN',
+                    Text(formatMoney(receipt.subtotal, receipt.currency),
                         style: const TextStyle(fontSize: 13, color: Colors.black54)),
                   ],
                 ),
@@ -532,7 +670,7 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                   children: [
                     const Text('Service charge',
                         style: TextStyle(fontSize: 13, color: Colors.black54)),
-                    Text('+${receipt.serviceCharge!.toStringAsFixed(2)} AZN',
+                    Text('+${formatMoney(receipt.serviceCharge!, receipt.currency)}',
                         style: const TextStyle(fontSize: 13, color: Colors.black54)),
                   ],
                 ),
@@ -616,7 +754,9 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                                 : const Icon(Icons.check, size: 18),
                             label: Text(_saving ? 'Saving…' : 'Save receipt'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF1B5E20),
+                              backgroundColor: AppColors.primaryGreen(
+                                Theme.of(context).brightness,
+                              ),
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
@@ -682,7 +822,7 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.check_circle, color: Color(0xFF1B5E20)),
+                  icon: const Icon(Icons.check_circle, color: AppColors.primaryGreenDark),
                   onPressed: () => setState(() => edit.editing = false),
                 ),
                 IconButton(
@@ -809,7 +949,7 @@ class _SaveScopeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? const Color(0xFFE8F5E9) : Colors.grey.shade100,
+      color: selected ? AppColors.green100 : Colors.grey.shade100,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -819,7 +959,7 @@ class _SaveScopeChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: selected ? const Color(0xFF1B5E20) : Colors.grey.shade300,
+              color: selected ? AppColors.primaryGreenDark : Colors.grey.shade300,
               width: selected ? 1.5 : 1,
             ),
           ),
@@ -829,7 +969,7 @@ class _SaveScopeChip extends StatelessWidget {
               Icon(
                 icon,
                 size: 16,
-                color: selected ? const Color(0xFF1B5E20) : Colors.black54,
+                color: selected ? AppColors.primaryGreenDark : Colors.black54,
               ),
               const SizedBox(width: 6),
               Text(
@@ -837,7 +977,7 @@ class _SaveScopeChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: selected ? const Color(0xFF1B5E20) : Colors.black54,
+                  color: selected ? AppColors.primaryGreenDark : Colors.black54,
                 ),
               ),
             ],

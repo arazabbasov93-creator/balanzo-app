@@ -9,6 +9,7 @@ import '../services/analytics_service.dart';
 import '../services/auth_service.dart';
 import '../services/category_service.dart';
 import '../services/crash_service.dart';
+import '../config/app_colors.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -84,7 +85,7 @@ class _LoginScreenState extends State<LoginScreen> {
         content: Text(msg),
         backgroundColor: Colors.red.shade700,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -115,7 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final lang = currentLanguage.value;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppColors.scaffoldDark : AppColors.scaffoldLight,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
@@ -176,8 +177,8 @@ class _LoginScreenState extends State<LoginScreen> {
           width: 76,
           height: 76,
           decoration: BoxDecoration(
-            color: const Color(0xFF1B5E20),
-            borderRadius: BorderRadius.circular(20),
+            color: AppColors.primaryGreenDark,
+            borderRadius: BorderRadius.circular(12),
           ),
           child: const Icon(
             Icons.account_balance_wallet,
@@ -191,7 +192,7 @@ class _LoginScreenState extends State<LoginScreen> {
           style: const TextStyle(
             fontSize: 34,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF1B5E20),
+            color: AppColors.primaryGreenDark,
             letterSpacing: -0.5,
           ),
         ),
@@ -226,7 +227,7 @@ class _GoogleButton extends StatelessWidget {
       child: OutlinedButton(
         onPressed: inactive ? null : onPressed,
         style: OutlinedButton.styleFrom(
-          backgroundColor: Colors.white,
+          backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppColors.scaffoldDark : AppColors.scaffoldLight,
           side: BorderSide(color: disabled ? Colors.grey.shade200 : Colors.grey.shade300),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -239,7 +240,7 @@ class _GoogleButton extends StatelessWidget {
                 width: 22,
                 height: 22,
                 child: CircularProgressIndicator(
-                  color: Color(0xFF1B5E20),
+                  color: AppColors.primaryGreenDark,
                   strokeWidth: 2.5,
                 ),
               )

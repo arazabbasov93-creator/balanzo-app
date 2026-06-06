@@ -4,6 +4,8 @@ import '../../l10n/app_strings.dart';
 import '../../models/home_insights.dart';
 import '../../utils/icon_mapper.dart';
 import 'home_detail_sheets.dart';
+import '../../config/app_colors.dart';
+import '../../utils/currency_data.dart';
 
 class TopCategoryInsight extends StatelessWidget {
   final HomeInsights insights;
@@ -17,7 +19,7 @@ class TopCategoryInsight extends StatelessWidget {
     final lang = currentLanguage.value;
 
     return InkWell(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(12),
       onTap: () => showCategorySheet(
         context,
         category: top,
@@ -27,7 +29,7 @@ class TopCategoryInsight extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: Color(top.color).withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Color(top.color).withValues(alpha: 0.35)),
         ),
         child: Row(
@@ -54,7 +56,7 @@ class TopCategoryInsight extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${top.amount.toStringAsFixed(2)} AZN',
+                    formatMoney(top.amount, insights.periodCurrency),
                     style: TextStyle(
                       fontSize: 12,
                       color: Color(top.color),
@@ -151,7 +153,7 @@ class CategorySpendList extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  c.amount.toStringAsFixed(2),
+                  formatMoney(c.amount, insights.periodCurrency),
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -175,11 +177,13 @@ class CategorySpendList extends StatelessWidget {
 class TopStoresSection extends StatelessWidget {
   final List<StoreSpend> stores;
   final List<StoreSpend> allStores;
+  final String? periodCurrency;
 
   const TopStoresSection({
     super.key,
     required this.stores,
     this.allStores = const [],
+    this.periodCurrency,
   });
 
   @override
@@ -198,11 +202,11 @@ class TopStoresSection extends StatelessWidget {
                 dense: true,
                 leading: CircleAvatar(
                   radius: 18,
-                  backgroundColor: const Color(0xFFE8F5E9),
+                  backgroundColor: AppColors.green100,
                   child: Text(
                     s.name.isNotEmpty ? s.name[0].toUpperCase() : '?',
-                    style: const TextStyle(
-                      color: Color(0xFF1B5E20),
+                    style: TextStyle(
+                      color: AppColors.primaryGreen(Theme.of(context).brightness),
                       fontWeight: FontWeight.bold,
                       fontSize: 13,
                     ),
@@ -226,11 +230,11 @@ class TopStoresSection extends StatelessWidget {
                   ),
                 ),
                 trailing: Text(
-                  '${s.amount.toStringAsFixed(2)} AZN',
-                  style: const TextStyle(
+                  formatMoney(s.amount, periodCurrency),
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
-                    color: Color(0xFF1B5E20),
+                    color: AppColors.primaryGreen(Theme.of(context).brightness),
                   ),
                 ),
               )),
@@ -240,7 +244,7 @@ class TopStoresSection extends StatelessWidget {
               child: Text(
                 AppStrings.get('see_all', lang),
                 style: const TextStyle(
-                  color: Color(0xFF4CAF50),
+                  color: AppColors.green400,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -319,7 +323,7 @@ class _QuantityHeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final qtyLabel = _fmtQty(product.totalQuantity);
     return InkWell(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(12),
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(14),
@@ -332,7 +336,7 @@ class _QuantityHeroCard extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: const Color(0xFF2196F3).withValues(alpha: 0.35)),
         ),
         child: Row(
@@ -423,31 +427,31 @@ class _ValueHeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(12),
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              const Color(0xFF1B5E20).withValues(alpha: 0.22),
-              const Color(0xFF1B5E20).withValues(alpha: 0.06),
+              AppColors.primaryGreen(Theme.of(context).brightness).withValues(alpha: 0.22),
+              AppColors.primaryGreen(Theme.of(context).brightness).withValues(alpha: 0.06),
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFF1B5E20).withValues(alpha: 0.35)),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.primaryGreen(Theme.of(context).brightness).withValues(alpha: 0.35)),
         ),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFF1B5E20).withValues(alpha: 0.15),
+                color: AppColors.primaryGreen(Theme.of(context).brightness).withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.payments_outlined, color: Color(0xFF1B5E20), size: 22),
+              child: Icon(Icons.payments_outlined, color: AppColors.primaryGreen(Theme.of(context).brightness), size: 22),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -486,10 +490,10 @@ class _ValueHeroCard extends StatelessWidget {
               children: [
                 Text(
                   product.amount.toStringAsFixed(2),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF1B5E20),
+                    color: AppColors.primaryGreen(Theme.of(context).brightness),
                   ),
                 ),
                 Text(

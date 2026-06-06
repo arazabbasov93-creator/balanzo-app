@@ -1,16 +1,16 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/income.dart';
+import 'supabase_access.dart';
 
 class IncomeService {
   static String _monthKey(int month, int year, {String? userId}) {
-    final uid = userId ?? Supabase.instance.client.auth.currentUser?.id ?? 'anon';
+    final uid = userId ?? SupabaseAccess.currentUserId ?? 'anon';
     return 'income_${uid}_${year}_$month';
   }
 
   static String _recurringKey({String? userId}) {
-    final uid = userId ?? Supabase.instance.client.auth.currentUser?.id ?? 'anon';
+    final uid = userId ?? SupabaseAccess.currentUserId ?? 'anon';
     return 'income_recurring_$uid';
   }
 

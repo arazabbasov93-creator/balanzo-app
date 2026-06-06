@@ -65,7 +65,7 @@ class StructuredReceiptParser {
       subtotal: subtotal,
       vat: vat ?? 0,
       total: total ?? subtotal,
-      currency: 'AZN',
+      currency: null,
     );
   }
 
@@ -105,7 +105,7 @@ class StructuredReceiptParser {
       subtotal: 0,
       vat: vat ?? 0,
       total: total ?? 0,
-      currency: 'AZN',
+      currency: null,
     );
   }
 }

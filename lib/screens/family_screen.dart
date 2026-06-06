@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/supabase_access.dart';
 import '../app_state.dart';
 import '../l10n/app_strings.dart';
 import '../models/family.dart';
 import '../services/family_service.dart';
+import '../config/app_colors.dart';
 
 class FamilyScreen extends StatefulWidget {
   const FamilyScreen({super.key});
@@ -27,11 +28,10 @@ class _FamilyScreenState extends State<FamilyScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF09090B),
+      backgroundColor: AppColors.darkSurface,
       appBar: AppBar(
-        title: Text(AppStrings.get('family', currentLanguage.value), style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFF2F2F5))),
-        backgroundColor: const Color(0xFF09090B),
-        foregroundColor: const Color(0xFFF2F2F5),
+        title: Text(AppStrings.get('family', currentLanguage.value), style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.darkOnSurface)),
+        foregroundColor: AppColors.darkOnSurface,
         elevation: 0,
       ),
       body: FutureBuilder<Family?>(
@@ -43,7 +43,7 @@ class _FamilyScreenState extends State<FamilyScreen> {
           if (snapshot.hasError) {
             return Center(
               child: Text('Error: ${snapshot.error}',
-                  style: const TextStyle(color: Color(0xFF8888A0))),
+                  style: const TextStyle(color: AppColors.darkOnSurfaceVariant)),
             );
           }
           final family = snapshot.data;
@@ -73,19 +73,19 @@ class _NoFamilyViewState extends State<_NoFamilyView> {
     final name = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF18181C),
-        title: Text(AppStrings.get('create_family', currentLanguage.value), style: const TextStyle(color: Color(0xFFF2F2F5))),
+        backgroundColor: AppColors.darkElevated,
+        title: Text(AppStrings.get('create_family', currentLanguage.value), style: const TextStyle(color: AppColors.darkOnSurface)),
         content: TextField(
           controller: ctrl,
-          style: const TextStyle(color: Color(0xFFF2F2F5)),
+          style: const TextStyle(color: AppColors.darkOnSurface),
           decoration: InputDecoration(
             hintText: 'Family name (e.g. Əliyev family)',
-            hintStyle: const TextStyle(color: Color(0xFF8888A0)),
+            hintStyle: const TextStyle(color: AppColors.darkOnSurfaceVariant),
             border: const OutlineInputBorder(),
             enabledBorder: OutlineInputBorder(
-              borderSide: BorderSide(color: const Color(0xFF2C2C34)),
+              borderSide: BorderSide(color: AppColors.darkOutline),
             ),
-            fillColor: const Color(0xFF09090B),
+            fillColor: AppColors.darkSurface,
             filled: true,
           ),
           autofocus: true,
@@ -93,12 +93,14 @@ class _NoFamilyViewState extends State<_NoFamilyView> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text(AppStrings.get('cancel', currentLanguage.value), style: const TextStyle(color: Color(0xFF8888A0))),
+            child: Text(AppStrings.get('cancel', currentLanguage.value), style: const TextStyle(color: AppColors.darkOnSurfaceVariant)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(ctrl.text.trim()),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1B5E20),
+              backgroundColor: AppColors.primaryGreen(
+                Theme.of(context).brightness,
+              ),
               foregroundColor: Colors.white,
             ),
             child: Text(AppStrings.get('create_family', currentLanguage.value)),
@@ -133,21 +135,21 @@ class _NoFamilyViewState extends State<_NoFamilyView> {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: const Color(0xFF18181C),
-                borderRadius: BorderRadius.circular(20),
+                color: AppColors.darkElevated,
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.group_add, size: 44, color: Color(0xFF1B5E20)),
+              child: const Icon(Icons.group_add, size: 44, color: AppColors.primaryGreenDark),
             ),
             const SizedBox(height: 20),
             Text(
               AppStrings.get('no_family_yet', currentLanguage.value),
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFF2F2F5)),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.darkOnSurface),
             ),
             const SizedBox(height: 10),
             Text(
               AppStrings.get('no_family_desc', currentLanguage.value),
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14, color: Color(0xFF8888A0)),
+              style: const TextStyle(fontSize: 14, color: AppColors.darkOnSurfaceVariant),
             ),
             const SizedBox(height: 28),
             SizedBox(
@@ -160,7 +162,9 @@ class _NoFamilyViewState extends State<_NoFamilyView> {
                     : const Icon(Icons.add),
                 label: Text(AppStrings.get('create_family', currentLanguage.value)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1B5E20),
+                  backgroundColor: AppColors.primaryGreen(
+                    Theme.of(context).brightness,
+                  ),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 0,
@@ -204,7 +208,7 @@ class _FamilyViewState extends State<_FamilyView> {
 
   Future<void> _loadCombinedSpend() async {
     try {
-      final supabase = Supabase.instance.client;
+      final supabase = SupabaseAccess.client;
       final members = await FamilyService.fetchMembers(widget.family.id);
       final memberIds = members.map((m) => m.userId).toList();
       if (memberIds.isEmpty) return;
@@ -234,30 +238,32 @@ class _FamilyViewState extends State<_FamilyView> {
     final phone = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF18181C),
-        title: Text(AppStrings.get('add_member', currentLanguage.value), style: const TextStyle(color: Color(0xFFF2F2F5))),
+        backgroundColor: AppColors.darkElevated,
+        title: Text(AppStrings.get('add_member', currentLanguage.value), style: const TextStyle(color: AppColors.darkOnSurface)),
         content: TextField(
           controller: ctrl,
           keyboardType: TextInputType.phone,
-          style: const TextStyle(color: Color(0xFFF2F2F5)),
+          style: const TextStyle(color: AppColors.darkOnSurface),
           decoration: const InputDecoration(
             hintText: '+994501234567',
-            hintStyle: TextStyle(color: Color(0xFF8888A0)),
+            hintStyle: TextStyle(color: AppColors.darkOnSurfaceVariant),
             border: OutlineInputBorder(),
             labelText: 'Phone number',
-            labelStyle: TextStyle(color: Color(0xFF8888A0)),
+            labelStyle: TextStyle(color: AppColors.darkOnSurfaceVariant),
           ),
           autofocus: true,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text(AppStrings.get('cancel', currentLanguage.value), style: const TextStyle(color: Color(0xFF8888A0))),
+            child: Text(AppStrings.get('cancel', currentLanguage.value), style: const TextStyle(color: AppColors.darkOnSurfaceVariant)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(ctrl.text.trim()),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1B5E20),
+              backgroundColor: AppColors.primaryGreen(
+                Theme.of(context).brightness,
+              ),
               foregroundColor: Colors.white,
             ),
             child: Text(AppStrings.get('add_member', currentLanguage.value)),
@@ -297,11 +303,14 @@ class _FamilyViewState extends State<_FamilyView> {
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            gradient: LinearGradient(
+          colors: [
+            AppColors.primaryGreen(Theme.of(context).brightness),
+            AppColors.gradientEnd(Theme.of(context).brightness),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Column(
@@ -338,9 +347,9 @@ class _FamilyViewState extends State<_FamilyView> {
           icon: const Icon(Icons.share, size: 18),
           label: Text(AppStrings.get('invite_whatsapp', currentLanguage.value)),
           style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFF4CAF50),
-            side: const BorderSide(color: Color(0xFF2C2C34)),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            foregroundColor: AppColors.green400,
+            side: const BorderSide(color: AppColors.darkOutline),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             padding: const EdgeInsets.symmetric(vertical: 12),
           ),
         ),
@@ -349,12 +358,12 @@ class _FamilyViewState extends State<_FamilyView> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(AppStrings.get('members', currentLanguage.value),
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFFF2F2F5))),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.darkOnSurface)),
             TextButton.icon(
               onPressed: _addMember,
               icon: const Icon(Icons.person_add_outlined, size: 18),
               label: const Text('Add'),
-              style: TextButton.styleFrom(foregroundColor: const Color(0xFF4CAF50)),
+              style: TextButton.styleFrom(foregroundColor: AppColors.green400),
             ),
           ],
         ),
@@ -377,14 +386,14 @@ class _FamilyViewState extends State<_FamilyView> {
             final confirmed = await showDialog<bool>(
               context: context,
               builder: (_) => AlertDialog(
-                backgroundColor: const Color(0xFF18181C),
-                title: Text(AppStrings.get('leave_family', currentLanguage.value), style: const TextStyle(color: Color(0xFFF2F2F5))),
+                backgroundColor: AppColors.darkElevated,
+                title: Text(AppStrings.get('leave_family', currentLanguage.value), style: const TextStyle(color: AppColors.darkOnSurface)),
                 content: const Text('Are you sure you want to leave this family?',
-                    style: TextStyle(color: Color(0xFF8888A0))),
+                    style: TextStyle(color: AppColors.darkOnSurfaceVariant)),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(false),
-                    child: Text(AppStrings.get('cancel', currentLanguage.value), style: const TextStyle(color: Color(0xFF8888A0))),
+                    child: Text(AppStrings.get('cancel', currentLanguage.value), style: const TextStyle(color: AppColors.darkOnSurfaceVariant)),
                   ),
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(true),
@@ -420,22 +429,23 @@ class _MemberCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF18181C),
+        color: AppColors.darkElevated,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF2C2C34)),
+        border: Border.all(color: AppColors.darkOutline),
       ),
       child: ListTile(
+        tileColor: Colors.transparent,
         leading: CircleAvatar(
-          backgroundColor: const Color(0xFF1E2F1E),
+          backgroundColor: AppColors.tintSurfaceDark,
           child: Text(
             member.displayName.substring(0, 1).toUpperCase(),
-            style: const TextStyle(color: Color(0xFF4CAF50), fontWeight: FontWeight.bold),
+            style: const TextStyle(color: AppColors.green400, fontWeight: FontWeight.bold),
           ),
         ),
         title: Text(member.displayName,
-            style: const TextStyle(fontWeight: FontWeight.w500, color: Color(0xFFF2F2F5))),
+            style: const TextStyle(fontWeight: FontWeight.w500, color: AppColors.darkOnSurface)),
         subtitle: Text(member.role,
-            style: const TextStyle(color: Color(0xFF8888A0), fontSize: 12)),
+            style: const TextStyle(color: AppColors.darkOnSurfaceVariant, fontSize: 12)),
         trailing: member.role != 'admin'
             ? IconButton(
                 icon: const Icon(Icons.remove_circle_outline, color: Colors.red),

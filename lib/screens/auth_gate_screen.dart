@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../diag_log.dart';
+import '../app_state.dart';
+import '../services/supabase_access.dart';
 import '../services/analytics_service.dart';
 import '../services/category_service.dart';
 import 'login_screen.dart';
 import 'dashboard_screen.dart';
 import 'receipt_capture_screen.dart';
+import '../config/app_colors.dart';
 
 class AuthGateScreen extends StatefulWidget {
   const AuthGateScreen({super.key});
@@ -14,13 +18,35 @@ class AuthGateScreen extends StatefulWidget {
 }
 
 class _AuthGateScreenState extends State<AuthGateScreen> {
+  bool _retrying = false;
+  bool _listenersWired = false;
+
   @override
   void initState() {
     super.initState();
-    if (Supabase.instance.client.auth.currentSession != null) {
+    supabaseReadyNotifier.addListener(_onSupabaseReady);
+    if (supabaseReady) _wireAuthListeners();
+  }
+
+  @override
+  void dispose() {
+    supabaseReadyNotifier.removeListener(_onSupabaseReady);
+    super.dispose();
+  }
+
+  void _onSupabaseReady() {
+    if (!supabaseReadyNotifier.value || !mounted) return;
+    _wireAuthListeners();
+    setState(() {});
+  }
+
+  void _wireAuthListeners() {
+    if (_listenersWired || !supabaseReady) return;
+    _listenersWired = true;
+    if (SupabaseAccess.clientOrNull?.auth.currentSession != null) {
       CategoryService.refreshCache();
     }
-    Supabase.instance.client.auth.onAuthStateChange.listen((state) {
+    SupabaseAccess.client.auth.onAuthStateChange.listen((state) {
       if (state.session != null) {
         CategoryService.refreshCache();
       } else {
@@ -29,13 +55,66 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
     });
   }
 
+  Future<void> _retryConnect() async {
+    if (_retrying) return;
+    setState(() => _retrying = true);
+    try {
+      await Supabase.initialize(
+        url: 'https://mwookghnlhmseayeyycj.supabase.co',
+        anonKey:
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13b29rZ2hubGhtc2VheWV5eWNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzNzMyMjEsImV4cCI6MjA5NDk0OTIyMX0.lTcGXJ2u5V_jJTzwDQFagCmLE7cRrrRcCPpuAM6E-d8',
+      ).timeout(const Duration(seconds: 15));
+      supabaseReady = true;
+      supabaseReadyNotifier.value = true;
+      _wireAuthListeners();
+    } catch (e, st) {
+      debugPrint('[AuthGate] Supabase retry failed: $e\n$st');
+    } finally {
+      if (mounted) setState(() => _retrying = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (!supabaseReady) {
+      diag('AuthGate.build offline-retry');
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.cloud_off, size: 48, color: Colors.grey),
+                const SizedBox(height: 16),
+                const Text(
+                  'Could not connect to Balanzo services.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16),
+                ),
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: _retrying ? null : _retryConnect,
+                  child: _retrying
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return StreamBuilder<AuthState>(
-      stream: Supabase.instance.client.auth.onAuthStateChange,
+      stream: SupabaseAccess.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
         final session = snapshot.data?.session ??
-            Supabase.instance.client.auth.currentSession;
+            SupabaseAccess.clientOrNull?.auth.currentSession;
+        diag('AuthGate.build session', session != null ? 'logged-in→Dashboard' : 'LoginScreen');
         if (session != null) return const DashboardScreen();
         return const LoginScreen();
       },
@@ -50,7 +129,7 @@ class FirstScanGateway extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppColors.scaffoldDark : AppColors.scaffoldLight,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -63,13 +142,13 @@ class FirstScanGateway extends StatelessWidget {
                 height: 80,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE8F5E9),
-                  borderRadius: BorderRadius.circular(20),
+                  color: AppColors.green100,
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
                   Icons.document_scanner_outlined,
                   size: 44,
-                  color: Color(0xFF1B5E20),
+                  color: AppColors.primaryGreenDark,
                 ),
               ),
               const SizedBox(height: 24),
@@ -99,11 +178,13 @@ class FirstScanGateway extends StatelessWidget {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1B5E20),
+                  backgroundColor: AppColors.primaryGreen(
+                    Theme.of(context).brightness,
+                  ),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                      borderRadius: BorderRadius.circular(12)),
                   elevation: 0,
                 ),
               ),
@@ -116,7 +197,7 @@ class FirstScanGateway extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   side: const BorderSide(color: Colors.grey),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                      borderRadius: BorderRadius.circular(12)),
                 ),
                 child: const Text(
                   'Sign In / Create Account',

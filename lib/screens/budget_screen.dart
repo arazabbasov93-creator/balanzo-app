@@ -3,6 +3,7 @@ import '../models/budget.dart';
 import '../models/category.dart';
 import '../services/budget_service.dart';
 import '../services/category_service.dart';
+import '../config/app_colors.dart';
 
 class BudgetScreen extends StatefulWidget {
   const BudgetScreen({super.key});
@@ -76,7 +77,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
             ElevatedButton(
               onPressed: () => Navigator.of(ctx).pop(true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1B5E20),
+                backgroundColor: AppColors.primaryGreen(
+                  Theme.of(context).brightness,
+                ),
                 foregroundColor: Colors.white,
               ),
               child: const Text('Save'),
@@ -110,10 +113,9 @@ class _BudgetScreenState extends State<BudgetScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppColors.scaffoldDark : AppColors.scaffoldLight,
       appBar: AppBar(
         title: const Text('Budget', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1B5E20),
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -148,8 +150,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
                     icon: const Icon(Icons.add),
                     label: const Text('Add Budget'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF1B5E20),
-                      side: const BorderSide(color: Color(0xFF1B5E20)),
+                      foregroundColor: AppColors.primaryGreenDark,
+                      side: const BorderSide(color: AppColors.primaryGreenDark),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
@@ -204,10 +206,10 @@ class _EmptyBudgetHint extends StatelessWidget {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: const Color(0xFFE8F5E9),
-                borderRadius: BorderRadius.circular(18),
+                color: AppColors.green100,
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.pie_chart_outline, size: 40, color: Color(0xFF1B5E20)),
+              child: const Icon(Icons.pie_chart_outline, size: 40, color: AppColors.primaryGreenDark),
             ),
             const SizedBox(height: 16),
             const Text('No budgets yet', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
@@ -223,7 +225,9 @@ class _EmptyBudgetHint extends StatelessWidget {
               icon: const Icon(Icons.add),
               label: const Text('Set First Budget'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1B5E20),
+                backgroundColor: AppColors.primaryGreen(
+                  Theme.of(context).brightness,
+                ),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
@@ -249,13 +253,13 @@ class _BudgetCard extends StatelessWidget {
         ? Colors.red
         : budget.usedFraction > 0.8
             ? Colors.orange
-            : const Color(0xFF1B5E20);
+            : AppColors.primaryGreenDark;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: Colors.grey.shade200),
       ),
       child: Padding(

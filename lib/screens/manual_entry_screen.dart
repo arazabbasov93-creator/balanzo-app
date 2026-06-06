@@ -5,6 +5,7 @@ import '../l10n/app_strings.dart';
 import '../models/receipt.dart';
 import '../services/receipt_service.dart';
 import 'receipt_detail_screen.dart';
+import '../config/app_colors.dart';
 
 class ManualEntryScreen extends StatefulWidget {
   const ManualEntryScreen({super.key});
@@ -39,7 +40,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
       lastDate: DateTime.now(),
       builder: (context, child) => Theme(
         data: ThemeData(
-          colorScheme: const ColorScheme.light(primary: Color(0xFF1B5E20)),
+          colorScheme: const ColorScheme.light(primary: AppColors.primaryGreenDark),
         ),
         child: child!,
       ),
@@ -100,7 +101,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
         subtotal: total,
         vat: 0,
         total: total,
-        currency: 'AZN',
+        currency: null,
       );
 
       final id = await ReceiptService.save(receipt);
@@ -121,7 +122,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
   void _snack(String msg, {bool error = false}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
-      backgroundColor: error ? Colors.red.shade700 : const Color(0xFF1B5E20),
+      backgroundColor: error ? Colors.red.shade700 : AppColors.primaryGreenDark,
       behavior: SnackBarBehavior.floating,
     ));
   }
@@ -129,10 +130,9 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppColors.scaffoldDark : AppColors.scaffoldLight,
       appBar: AppBar(
         title: Text(AppStrings.get('manual_entry', currentLanguage.value), style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1B5E20),
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -159,7 +159,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
                       children: [
@@ -205,7 +205,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                       onPressed: _addItem,
                       icon: const Icon(Icons.add, size: 18),
                       label: Text(AppStrings.get('add_item', currentLanguage.value)),
-                      style: TextButton.styleFrom(foregroundColor: const Color(0xFF1B5E20)),
+                      style: TextButton.styleFrom(foregroundColor: AppColors.primaryGreenDark),
                     ),
                   ],
                 ),
@@ -240,7 +240,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
-                        color: Color(0xFF1B5E20),
+                        color: AppColors.primaryGreenDark,
                       ),
                     ),
                   ],
@@ -258,10 +258,12 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                   : const Icon(Icons.save_outlined, size: 20),
               label: Text(_saving ? AppStrings.get('saving', currentLanguage.value) : AppStrings.get('save_receipt', currentLanguage.value)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1B5E20),
+                backgroundColor: AppColors.primaryGreen(
+                  Theme.of(context).brightness,
+                ),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 elevation: 0,
               ),
             ),
@@ -361,7 +363,7 @@ class _Card extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.card(Theme.of(context).brightness),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.grey.shade200),
       ),
@@ -383,11 +385,11 @@ class _Label extends StatelessWidget {
 InputDecoration _inputDecoration(String hint) => InputDecoration(
       hintText: hint,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: Colors.grey.shade300),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: Colors.grey.shade300),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),

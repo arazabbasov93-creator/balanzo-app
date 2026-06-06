@@ -20,6 +20,7 @@ import 'home_budget_section.dart';
 import 'home_insight_sections.dart';
 import 'insight_stat_grid.dart';
 import 'last_week_spend_card.dart';
+import '../../config/app_colors.dart';
 
 typedef HomeScopeData = ({
   HomeInsights? insights,
@@ -72,7 +73,16 @@ class HomeScopePage extends StatefulWidget {
 
 class _HomeScopePageState extends State<HomeScopePage>
     with AutomaticKeepAliveClientMixin {
-  late Future<HomeScopeData> _future;
+  Future<HomeScopeData> _future = Future.value((
+        insights: null as HomeInsights?,
+        budgets: <Budget>[],
+        budgetAlerts: <Budget>[],
+        noFamily: false,
+        incomeEntries: <IncomeEntry>[],
+        incomeTotal: 0.0,
+        familyMembers: null as List<MemberMonthSummary>?,
+        family: null as Family?,
+      ));
   HomeScopeData? _cached;
   bool _itemsLoading = false;
   bool _startedLoad = false;
@@ -114,7 +124,9 @@ class _HomeScopePageState extends State<HomeScopePage>
 
   void _reload({bool force = true}) {
     if (force) HomeDataCache.invalidate();
-    setState(() => _future = _load(force: force));
+    setState(() {
+      _future = _load(force: force);
+    });
   }
 
   Future<void> _switchPeriod() async {
@@ -140,10 +152,10 @@ class _HomeScopePageState extends State<HomeScopePage>
           budgetAlerts: const [],
           noFamily: _cached?.noFamily ?? false,
           incomeEntries: const [],
-          incomeTotal: 0,
+          incomeTotal: 0.0,
           familyMembers: _cached?.familyMembers,
           family: _cached?.family,
-        ) as HomeScopeData;
+        );
       });
       _publishHeader(_cached, instant);
     }
@@ -168,17 +180,21 @@ class _HomeScopePageState extends State<HomeScopePage>
     if (widget.periodMonth != now.month || widget.periodYear != now.year) {
       return;
     }
-    final prevMonth = now.month == 1 ? 12 : now.month - 1;
-    final prevYear = now.month == 1 ? now.year - 1 : now.year;
-    final key = '$prevYear-${prevMonth.toString().padLeft(2, '0')}';
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getString('last_monthly_summary_sent') == key) return;
-    if (insights.lastMonthTotal <= 0 && insights.receiptsLastMonth <= 0) return;
-    await NotificationService.sendMonthlySummary(
-      total: insights.lastMonthTotal,
-      receiptCount: insights.receiptsLastMonth,
-    );
-    await prefs.setString('last_monthly_summary_sent', key);
+    try {
+      final prevMonth = now.month == 1 ? 12 : now.month - 1;
+      final prevYear = now.month == 1 ? now.year - 1 : now.year;
+      final key = '$prevYear-${prevMonth.toString().padLeft(2, '0')}';
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getString('last_monthly_summary_sent') == key) return;
+      if (insights.lastMonthTotal <= 0 && insights.receiptsLastMonth <= 0) return;
+      await NotificationService.sendMonthlySummary(
+        total: insights.lastMonthTotal,
+        receiptCount: insights.receiptsLastMonth,
+      );
+      await prefs.setString('last_monthly_summary_sent', key);
+    } catch (e, st) {
+      debugPrint('[HomeScope] monthly summary notification skipped: $e\n$st');
+    }
   }
 
   @override
@@ -206,10 +222,10 @@ class _HomeScopePageState extends State<HomeScopePage>
         budgetAlerts: <Budget>[],
         noFamily: true,
         incomeEntries: <IncomeEntry>[],
-        incomeTotal: 0,
+        incomeTotal: 0.0,
         familyMembers: null as List<MemberMonthSummary>?,
         family: null as Family?,
-      ) as HomeScopeData;
+      );
     }
 
     if (familyMode) {
@@ -222,10 +238,10 @@ class _HomeScopePageState extends State<HomeScopePage>
           budgetAlerts: <Budget>[],
           noFamily: true,
           incomeEntries: <IncomeEntry>[],
-          incomeTotal: 0,
+          incomeTotal: 0.0,
           familyMembers: null as List<MemberMonthSummary>?,
           family: null as Family?,
-        ) as HomeScopeData;
+        );
       }
       widget.onFamilyStatusChanged?.call();
     }
@@ -249,7 +265,7 @@ class _HomeScopePageState extends State<HomeScopePage>
           budgetAlerts: _cached?.budgetAlerts ?? [],
           noFamily: false,
           incomeEntries: _cached?.incomeEntries ?? [],
-          incomeTotal: _cached?.incomeTotal ?? 0,
+          incomeTotal: _cached?.incomeTotal ?? 0.0,
           familyMembers: _cached?.familyMembers,
           family: _cached?.family,
         );
@@ -276,6 +292,10 @@ class _HomeScopePageState extends State<HomeScopePage>
       insights: insights,
     );
     if (mounted) _maybeSendMonthlySummary(pack);
+    if (mounted) {
+      setState(() => _cached = pack);
+      _publishHeader(pack, insights);
+    }
     return pack;
   }
 
@@ -322,10 +342,20 @@ class _HomeScopePageState extends State<HomeScopePage>
               income > 0 &&
               spend > income &&
               family.createdBy == AuthService.currentUser?.id) {
-            await NotificationService.sendFamilyBudgetAlert(
-              memberName: m.displayName,
-              overspend: spend - income,
-            );
+            try {
+              final prefs = await SharedPreferences.getInstance();
+              final alertKey =
+                  'family_budget_alert_${m.userId}_${year}_${month.toString().padLeft(2, '0')}';
+              if (prefs.getBool(alertKey) != true) {
+                await NotificationService.sendFamilyBudgetAlert(
+                  memberName: m.displayName,
+                  overspend: spend - income,
+                );
+                await prefs.setBool(alertKey, true);
+              }
+            } catch (e, st) {
+              debugPrint('[HomeScope] family budget alert skipped: $e\n$st');
+            }
           }
         }
         try {
@@ -361,7 +391,7 @@ class _HomeScopePageState extends State<HomeScopePage>
       incomeTotal: incomeTotal,
       familyMembers: familyMembers,
       family: family,
-    ) as HomeScopeData;
+    );
   }
 
   void _publishHeader(HomeScopeData? pack, HomeInsights? insights) {
@@ -395,16 +425,6 @@ class _HomeScopePageState extends State<HomeScopePage>
     return FutureBuilder<HomeScopeData>(
       future: _future,
       builder: (context, snapshot) {
-        if (snapshot.hasData) {
-          final data = snapshot.data!;
-          final insights = data.insights;
-          if (insights == null ||
-              (insights.periodMonth == widget.periodMonth &&
-                  insights.periodYear == widget.periodYear)) {
-            _cached = data;
-            _publishHeader(data, insights);
-          }
-        }
         final pack = _cached;
         final insights = pack?.insights;
 
@@ -510,6 +530,7 @@ class _HomeScopePageState extends State<HomeScopePage>
                     TopStoresSection(
                       stores: insights.topStores,
                       allStores: insights.allStores,
+                      periodCurrency: insights.periodCurrency,
                     ),
                   ],
                   if (insights.topProductsByQuantity.isNotEmpty ||
@@ -606,8 +627,8 @@ class _EmptyHomePrompt extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const Icon(Icons.document_scanner_outlined,
-              size: 48, color: Color(0xFF1B5E20)),
+          Icon(Icons.document_scanner_outlined,
+              size: 48, color: AppColors.primaryGreen(Theme.of(context).brightness)),
           const SizedBox(height: 12),
           Text(message, textAlign: TextAlign.center),
           if (showAddButton && onScan != null) ...[
@@ -616,7 +637,7 @@ class _EmptyHomePrompt extends StatelessWidget {
               onPressed: onScan,
               icon: const Icon(Icons.add),
               label: Text(AppStrings.get('add_receipt', lang)),
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1B5E20)),
+              style: FilledButton.styleFrom(backgroundColor: AppColors.primaryGreen(Theme.of(context).brightness)),
             ),
           ],
         ],

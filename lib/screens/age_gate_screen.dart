@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/analytics_service.dart';
 import 'auth_gate_screen.dart';
+import '../config/app_colors.dart';
 
 class AgeGateScreen extends StatefulWidget {
   const AgeGateScreen({super.key});
@@ -18,7 +19,8 @@ class _AgeGateScreenState extends State<AgeGateScreen> {
       setState(() => _blocked = true);
       return;
     }
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance()
+        .timeout(const Duration(seconds: 5));
     await prefs.setBool('age_gate_confirmed', true);
     await AnalyticsService.log('age_confirmed');
     if (!mounted) return;
@@ -31,7 +33,6 @@ class _AgeGateScreenState extends State<AgeGateScreen> {
   Widget build(BuildContext context) {
     if (_blocked) {
       return Scaffold(
-        backgroundColor: const Color(0xFF1B5E20),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
@@ -58,7 +59,7 @@ class _AgeGateScreenState extends State<AgeGateScreen> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppColors.scaffoldDark : AppColors.scaffoldLight,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -71,10 +72,10 @@ class _AgeGateScreenState extends State<AgeGateScreen> {
                 height: 80,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE8F5E9),
-                  borderRadius: BorderRadius.circular(20),
+                  color: AppColors.green100,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.cake_outlined, size: 44, color: Color(0xFF1B5E20)),
+                child: const Icon(Icons.cake_outlined, size: 44, color: AppColors.primaryGreenDark),
               ),
               const SizedBox(height: 32),
               const Text(
@@ -90,10 +91,12 @@ class _AgeGateScreenState extends State<AgeGateScreen> {
               ElevatedButton(
                 onPressed: () => _confirm(true),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1B5E20),
+                  backgroundColor: AppColors.primaryGreen(
+                    Theme.of(context).brightness,
+                  ),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 0,
                 ),
                 child: const Text('I am 18 or older', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
@@ -104,7 +107,7 @@ class _AgeGateScreenState extends State<AgeGateScreen> {
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   side: const BorderSide(color: Colors.grey),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 child: const Text('I am under 18', style: TextStyle(fontSize: 16, color: Colors.grey)),
               ),

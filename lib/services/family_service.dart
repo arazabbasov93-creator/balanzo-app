@@ -1,16 +1,19 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/family.dart';
+import 'supabase_access.dart';
 
 class FamilyService {
-  static final _db = Supabase.instance.client;
-  static String get _userId => _db.auth.currentUser!.id;
+  static SupabaseClient get _db => SupabaseAccess.client;
+  static String? get _userId => SupabaseAccess.currentUserId;
 
   /// Returns the family the current user belongs to, or null.
   static Future<Family?> fetchMyFamily() async {
+    final uid = _userId;
+    if (uid == null) return null;
     final memberRows = await _db
         .from('family_members')
         .select('family_id')
-        .eq('user_id', _userId)
+        .eq('user_id', uid)
         .limit(1);
     if ((memberRows as List).isEmpty) return null;
     final familyId = memberRows.first['family_id'] as String;
@@ -20,15 +23,17 @@ class FamilyService {
 
   /// Creates a new family and makes current user admin.
   static Future<Family> createFamily(String name) async {
+    final uid = _userId;
+    if (uid == null) throw Exception('Please sign in.');
     final row = await _db
         .from('families')
-        .insert({'name': name, 'created_by': _userId})
+        .insert({'name': name, 'created_by': uid})
         .select()
         .single();
     final family = Family.fromJson(row);
     await _db.from('family_members').insert({
       'family_id': family.id,
-      'user_id': _userId,
+      'user_id': uid,
       'role': 'admin',
     });
     return family;
@@ -65,11 +70,13 @@ class FamilyService {
   }
 
   static Future<void> leaveFamily(String familyId) async {
+    final uid = _userId;
+    if (uid == null) return;
     await _db
         .from('family_members')
         .delete()
         .eq('family_id', familyId)
-        .eq('user_id', _userId);
+        .eq('user_id', uid);
   }
 
   static Future<void> updateFamilyName(String familyId, String name) async {

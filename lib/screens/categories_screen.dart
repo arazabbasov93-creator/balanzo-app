@@ -4,6 +4,7 @@ import '../l10n/app_strings.dart';
 import '../models/category.dart';
 import '../services/category_service.dart';
 import '../utils/icon_mapper.dart';
+import '../config/app_colors.dart';
 
 class CategoriesScreen extends StatefulWidget {
   const CategoriesScreen({super.key});
@@ -48,7 +49,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1B5E20),
+              backgroundColor: AppColors.primaryGreen(
+                Theme.of(context).brightness,
+              ),
               foregroundColor: Colors.white,
             ),
             child: Text(AppStrings.get('add_category', lang)),
@@ -79,10 +82,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   Widget build(BuildContext context) {
     final lang = currentLanguage.value;
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppColors.scaffoldDark : AppColors.scaffoldLight,
       appBar: AppBar(
         title: Text(AppStrings.get('categories', lang)),
-        backgroundColor: const Color(0xFF1B5E20),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -109,6 +111,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                   side: BorderSide(color: Colors.grey.shade200),
                 ),
                 child: ListTile(
+                  tileColor: Colors.transparent,
                   leading: CircleAvatar(
                     backgroundColor: Color(cat.color).withValues(alpha: 0.15),
                     child: Icon(iconForName(cat.icon), color: Color(cat.color), size: 20),

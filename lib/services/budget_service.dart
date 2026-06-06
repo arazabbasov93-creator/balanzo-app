@@ -2,10 +2,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/budget.dart';
 import 'receipt_service.dart';
 import 'category_service.dart';
+import 'supabase_access.dart';
 
 class BudgetService {
-  static final _db = Supabase.instance.client;
-  static String get _userId => _db.auth.currentUser!.id;
+  static SupabaseClient get _db => SupabaseAccess.client;
+  static String? get _userId => SupabaseAccess.currentUserId;
 
   static Future<List<Budget>> fetchForMonth(int month, int year, {String? familyId}) async {
     var query = _db
@@ -17,7 +18,9 @@ class BudgetService {
     if (familyId != null) {
       query = query.eq('family_id', familyId);
     } else {
-      query = query.eq('user_id', _userId);
+      final uid = _userId;
+      if (uid == null) return [];
+      query = query.eq('user_id', uid);
     }
 
     final rows = await query.order('created_at');
@@ -42,7 +45,9 @@ class BudgetService {
     if (familyId != null) {
       data['family_id'] = familyId;
     } else {
-      data['user_id'] = _userId;
+      final uid = _userId;
+      if (uid == null) throw Exception('Please sign in.');
+      data['user_id'] = uid;
     }
     final row = await _db
         .from('budgets')
@@ -73,7 +78,8 @@ class BudgetService {
         .lte('purchase_date', to);
     receiptQuery = familyId != null
         ? receiptQuery.eq('family_id', familyId)
-        : receiptQuery.eq('user_id', _userId);
+        : receiptQuery.eq('user_id', _userId ?? '');
+    if (familyId == null && _userId == null) return {};
 
     final receiptRows = await receiptQuery;
     final ids = (receiptRows as List).map((r) => r['id'] as String).toList();

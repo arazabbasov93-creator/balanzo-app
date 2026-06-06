@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import '../services/notification_service.dart';
+import '../config/app_colors.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -19,11 +20,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _load() async {
-    final items = await NotificationService.fetchHistory();
-    setState(() {
-      _items = items;
-      _loading = false;
-    });
+    try {
+      final items = await NotificationService.fetchHistory();
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   IconData _iconForType(String type) {
@@ -48,7 +54,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'vat':
         return Colors.orange;
       case 'summary':
-        return const Color(0xFF1B5E20);
+        return AppColors.primaryGreenDark;
       case 'price':
         return Colors.red;
       default:
@@ -72,10 +78,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppColors.scaffoldDark : AppColors.scaffoldLight,
       appBar: AppBar(
         title: const Text('Notifications', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF1B5E20),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -113,7 +118,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     return Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AppColors.card(Theme.of(context).brightness),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: Colors.grey.shade200),
                       ),

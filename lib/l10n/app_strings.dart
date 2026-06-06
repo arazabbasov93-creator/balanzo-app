@@ -99,6 +99,10 @@ class AppStrings {
       'income_edit_source': 'Edit income source',
       'income_delete': 'Delete',
       'duplicate_receipt_title': 'Receipt already saved',
+      'soft_duplicate_title': 'Looks familiar',
+      'soft_duplicate_body': 'Looks like a receipt from {store} was already saved. Save anyway?',
+      'save_anyway': 'Save anyway',
+      'view_existing': 'View existing',
       'view_receipt': 'View receipt',
       'restock_ignore': 'Ignore',
       'restock_bought': 'Bought',
@@ -335,6 +339,10 @@ class AppStrings {
       'income_edit_source': 'Gəlir mənbəyini redaktə et',
       'income_delete': 'Sil',
       'duplicate_receipt_title': 'Qəbz artıq saxlanılıb',
+      'soft_duplicate_title': 'Tanış görünür',
+      'soft_duplicate_body': '{store} mağazasından oxşar qəbz artıq saxlanılıb. Yenə saxlayaq?',
+      'save_anyway': 'Yenə saxla',
+      'view_existing': 'Mövcudu gör',
       'view_receipt': 'Qəbzi aç',
       'restock_ignore': 'Yox say',
       'restock_bought': 'Alındı',
@@ -570,6 +578,10 @@ class AppStrings {
       'income_edit_source': 'Редактировать источник',
       'income_delete': 'Удалить',
       'duplicate_receipt_title': 'Чек уже сохранён',
+      'soft_duplicate_title': 'Похоже, уже есть',
+      'soft_duplicate_body': 'Похожий чек из {store} уже сохранён. Сохранить снова?',
+      'save_anyway': 'Всё равно сохранить',
+      'view_existing': 'Посмотреть существующий',
       'view_receipt': 'Открыть чек',
       'restock_ignore': 'Скрыть',
       'restock_bought': 'Купил',
@@ -784,6 +796,10 @@ class AppStrings {
       default:
         return 'To see the family view, join a family or create one — you can do this in Profile.';
     }
+  }
+
+  static String softDuplicateBody(String store, String locale) {
+    return get('soft_duplicate_body', locale).replaceAll('{store}', store);
   }
 
   static String duplicateReceiptBody(

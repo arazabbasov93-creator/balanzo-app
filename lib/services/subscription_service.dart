@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'supabase_access.dart';
 
 enum SubscriptionTier { free, aiPremium, familyPlan }
 
@@ -10,7 +11,7 @@ class SubscriptionService {
   static const double familyPlanAnnual = 19.99;
 
   static const _tierKey = 'subscription_tier';
-  static final _supabase = Supabase.instance.client;
+  static SupabaseClient get _supabase => SupabaseAccess.client;
 
   // T129: Check subscription status on launch from Supabase
   static Future<SubscriptionTier> fetchTier() async {
@@ -123,7 +124,7 @@ class SubscriptionService {
         isLoyalUser: monthsActive >= 6,
       );
     } catch (_) {
-      return const AiAccessResult(allowed: true, tier: SubscriptionTier.free);
+      return const AiAccessResult(allowed: false, tier: SubscriptionTier.free);
     }
   }
 

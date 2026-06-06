@@ -13,6 +13,7 @@ import 'ekassa_qr_screen.dart';
 import 'fiscal_id_screen.dart';
 import 'manual_entry_screen.dart';
 import 'receipt_result_sheet.dart';
+import '../config/app_colors.dart';
 
 class ReceiptCaptureScreen extends StatefulWidget {
   final bool isGuestMode;
@@ -203,9 +204,9 @@ class _ReceiptCaptureScreenState extends State<ReceiptCaptureScreen>
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
-      backgroundColor: error ? Colors.red.shade700 : const Color(0xFF1B5E20),
+      backgroundColor: error ? Colors.red.shade700 : AppColors.primaryGreenDark,
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ));
   }
 
@@ -320,7 +321,7 @@ class _ReceiptCaptureScreenState extends State<ReceiptCaptureScreen>
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -337,7 +338,7 @@ class _ReceiptCaptureScreenState extends State<ReceiptCaptureScreen>
           Text(
             '${_paths.length}/$_maxPhotos',
             style: const TextStyle(
-              color: Color(0xFF81C784),
+              color: AppColors.green300,
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
@@ -394,7 +395,7 @@ class _ReceiptCaptureScreenState extends State<ReceiptCaptureScreen>
                 label: Text(AppStrings.get('scan_ekassa_qr', lang)),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
-                  side: const BorderSide(color: Color(0xFF81C784)),
+                  side: const BorderSide(color: AppColors.green300),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30),
@@ -452,7 +453,7 @@ class _ReceiptCaptureScreenState extends State<ReceiptCaptureScreen>
                 icon: const Icon(Icons.camera_alt_outlined, size: 18),
                 label: Text(AppStrings.get('take_photo', lang)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF4CAF50),
+                  backgroundColor: AppColors.green400,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
@@ -485,7 +486,9 @@ class _ReceiptCaptureScreenState extends State<ReceiptCaptureScreen>
                   icon: const Icon(Icons.auto_awesome, size: 18),
                   label: Text(AppStrings.get('process_receipt', currentLanguage.value)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1B5E20),
+                    backgroundColor: AppColors.primaryGreen(
+                      Theme.of(context).brightness,
+                    ),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
@@ -537,7 +540,7 @@ class _FilledSlot extends StatelessWidget {
     return Stack(
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
           child: Image.file(
             File(path),
             width: 58,
@@ -592,7 +595,7 @@ class _EmptySlot extends StatelessWidget {
       height: 68,
       decoration: BoxDecoration(
         color: Colors.white12,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white24),
       ),
       child: Center(
@@ -625,7 +628,7 @@ class _OverlayPainter extends CustomPainter {
     canvas.restore();
 
     final paint = Paint()
-      ..color = const Color(0xFF4CAF50)
+      ..color = AppColors.green400
       ..strokeWidth = 3.5
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -659,7 +662,7 @@ class _ProcessingOverlay extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(color: Color(0xFF4CAF50)),
+            const CircularProgressIndicator(color: AppColors.green400),
             const SizedBox(height: 16),
             Text(
               AppStrings.get('processing_receipt', currentLanguage.value),

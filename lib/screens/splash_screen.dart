@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/analytics_service.dart';
 import 'age_gate_screen.dart';
 import 'auth_gate_screen.dart';
+import '../config/app_colors.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -15,6 +17,7 @@ class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
   late Animation<double> _fade;
+  bool _navigated = false;
 
   @override
   void initState() {
@@ -22,21 +25,34 @@ class _SplashScreenState extends State<SplashScreen>
     _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
     _fade = CurvedAnimation(parent: _ctrl, curve: Curves.easeIn);
     _ctrl.forward();
-    AnalyticsService.log('onboarding_started');
+    unawaited(AnalyticsService.log('onboarding_started'));
     _navigate();
+    // Safety net if SharedPreferences or navigation stalls on iOS.
+    Future.delayed(const Duration(seconds: 8), () {
+      if (mounted) _goNext(ageConfirmed: false);
+    });
   }
 
-  Future<void> _navigate() async {
-    await Future.delayed(const Duration(milliseconds: 1800));
-    if (!mounted) return;
-    final prefs = await SharedPreferences.getInstance();
-    final ageConfirmed = prefs.getBool('age_gate_confirmed') ?? false;
-    if (!mounted) return;
+  void _goNext({required bool ageConfirmed}) {
+    if (_navigated || !mounted) return;
+    _navigated = true;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => ageConfirmed ? const AuthGateScreen() : const AgeGateScreen(),
       ),
     );
+  }
+
+  Future<void> _navigate() async {
+    await Future.delayed(const Duration(milliseconds: 1800));
+    if (!mounted || _navigated) return;
+    var ageConfirmed = false;
+    try {
+      final prefs = await SharedPreferences.getInstance()
+          .timeout(const Duration(seconds: 3));
+      ageConfirmed = prefs.getBool('age_gate_confirmed') ?? false;
+    } catch (_) {}
+    _goNext(ageConfirmed: ageConfirmed);
   }
 
   @override
@@ -48,7 +64,7 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1B5E20),
+      backgroundColor: AppColors.primaryGreenDark,
       body: Center(
         child: FadeTransition(
           opacity: _fade,
@@ -78,6 +94,15 @@ class _SplashScreenState extends State<SplashScreen>
               const Text(
                 'Family budget made simple',
                 style: TextStyle(color: Colors.white60, fontSize: 16),
+              ),
+              const SizedBox(height: 32),
+              const SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: Colors.white70,
+                ),
               ),
             ],
           ),

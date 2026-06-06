@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/receipt.dart';
 import '../models/fiscal_duplicate.dart';
@@ -8,11 +9,12 @@ import 'category_assignment_service.dart';
 import 'category_matcher.dart';
 import 'category_service.dart';
 import 'ekassa_service.dart';
+import 'supabase_access.dart';
 
 class ReceiptService {
-  static final _db = Supabase.instance.client;
+  static SupabaseClient get _db => SupabaseAccess.client;
 
-  static String? get _userId => _db.auth.currentUser?.id;
+  static String? get _userId => SupabaseAccess.currentUserId;
 
   /// Last known unit price for [productName] across the user's saved receipts.
   static Future<double?> findLastUnitPriceForProduct(String productName) async {
@@ -105,12 +107,27 @@ class ReceiptService {
     return merged;
   }
 
+  static String? generateContentHash(Receipt receipt) =>
+      _generateContentHash(receipt);
+
+  static String? _generateContentHash(Receipt receipt) {
+    final store = receipt.store?.trim().toLowerCase();
+    final date = receipt.date?.toIso8601String().substring(0, 10);
+    final total = receipt.total.toStringAsFixed(2);
+    if (store == null || store.isEmpty || date == null) {
+      return null;
+    }
+    final raw = '$store|$date|$total';
+    return raw.hashCode.toRadixString(16);
+  }
+
   /// Saves a parsed receipt + its items. Returns the new receipt row id.
   /// If item insert fails the receipt is rolled back to avoid orphans.
   static Future<String> save(
     Receipt receipt, {
     List<Category>? categories,
     bool saveAsFamily = false,
+    bool skipSoftDuplicateCheck = false,
   }) async {
     final userId = _userId;
     if (userId == null) {
@@ -129,6 +146,15 @@ class ReceiptService {
         throw FiscalDuplicateException(dup);
       }
     }
+
+    final contentHash = _generateContentHash(corrected);
+    if (!skipSoftDuplicateCheck && contentHash != null) {
+      final softDup = await findDuplicateByContentHash(contentHash);
+      if (softDup != null) {
+        throw SoftDuplicateException(softDup);
+      }
+    }
+
     final storeName = corrected.store?.trim();
     final data = <String, dynamic>{
       'user_id': userId,
@@ -140,6 +166,8 @@ class ReceiptService {
       'total_amount': corrected.total,
     };
     if (corrected.documentId != null) data['fiscal_id'] = corrected.documentId;
+    if (contentHash != null) data['content_hash'] = contentHash;
+    if (corrected.currency != null) data['currency'] = corrected.currency;
     if (corrected.isGovernmentVerified) data['is_government_verified'] = true;
     if (saveAsFamily) {
       final familyId = await _currentFamilyId();
@@ -148,17 +176,18 @@ class ReceiptService {
 
     Map<String, dynamic> receiptRow;
     try {
-      receiptRow = await _db.from('receipts').insert(data).select('id').single();
+      receiptRow = await _insertReceiptRow(data);
     } catch (e) {
+      if (e is SoftDuplicateException) rethrow;
+      debugPrint('[Receipt Save] Retry 1: $e');
       data.remove('is_government_verified');
       try {
-        receiptRow =
-            await _db.from('receipts').insert(data).select('id').single();
-      } catch (_) {
-        data.remove('fiscal_id');
+        receiptRow = await _insertReceiptRow(data);
+      } catch (e2) {
+        if (e2 is SoftDuplicateException) rethrow;
+        debugPrint('[Receipt Save] Retry 2: $e2');
         data.remove('family_id');
-        receiptRow =
-            await _db.from('receipts').insert(data).select('id').single();
+        receiptRow = await _insertReceiptRow(data);
       }
     }
     final receiptId = receiptRow['id'] as String;
@@ -351,6 +380,36 @@ class ReceiptService {
     return msg.contains('PGRST204') && msg.contains(column);
   }
 
+  static bool _isContentHashUniqueViolation(Object e) {
+    final msg = e.toString().toLowerCase();
+    return msg.contains('23505') && msg.contains('hash');
+  }
+
+  static Future<Map<String, dynamic>> _insertReceiptRow(
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      return await _db.from('receipts').insert(data).select('id').single();
+    } catch (e) {
+      if (_isContentHashUniqueViolation(e)) {
+        final hash = data['content_hash'] as String?;
+        if (hash != null) {
+          final hit = await findDuplicateByContentHash(hash);
+          throw SoftDuplicateException(
+            hit ??
+                FiscalDuplicateHit(
+                  receiptId: '',
+                  storeName: data['store_name'] as String? ?? 'Unknown',
+                  purchaseDate: data['purchase_date'] as String?,
+                  scannerLabel: 'You',
+                ),
+          );
+        }
+      }
+      rethrow;
+    }
+  }
+
   /// Updates item category; uses [category] text if [category_id] column missing.
   static Future<void> updateItemCategory({
     required String itemId,
@@ -443,6 +502,64 @@ class ReceiptService {
         .eq('id', id)
         .single();
     return Map<String, dynamic>.from(row);
+  }
+
+  static Future<FiscalDuplicateHit?> findDuplicateByContentHash(
+    String contentHash,
+  ) async {
+    final userId = _userId;
+    if (userId == null) return null;
+    try {
+      final familyId = await _currentFamilyId();
+      final memberIds = <String>{userId};
+      if (familyId != null) {
+        final members = await _db
+            .from('family_members')
+            .select('user_id')
+            .eq('family_id', familyId);
+        for (final m in members as List) {
+          final id = m['user_id'] as String?;
+          if (id != null) memberIds.add(id);
+        }
+      }
+      final rows = await _db
+          .from('receipts')
+          .select(
+            'id, store_name, purchase_date, user_id, '
+            'users(full_name, phone, email)',
+          )
+          .eq('content_hash', contentHash)
+          .inFilter('user_id', memberIds.toList())
+          .limit(1);
+      if (rows.isEmpty) return null;
+      final row = rows.first;
+      final owner = row['users'] as Map<String, dynamic>?;
+      final label = (owner?['full_name'] as String?)?.trim() ??
+          (owner?['phone'] as String?) ??
+          (owner?['email'] as String?) ??
+          'Someone';
+      return FiscalDuplicateHit(
+        receiptId: row['id'] as String,
+        storeName: row['store_name'] as String? ?? 'Unknown',
+        purchaseDate: row['purchase_date'] as String?,
+        scannerLabel: label,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Updates receipt currency; omits column if missing from older DB schemas.
+  static Future<void> updateCurrency(String receiptId, String? currency) async {
+    try {
+      await _db
+          .from('receipts')
+          .update({'currency': currency})
+          .eq('id', receiptId);
+    } catch (e) {
+      if (isMissingColumnError(e, 'currency')) return;
+      rethrow;
+    }
   }
 
   /// Visible duplicate for [fiscalId] across user + family members.
@@ -867,4 +984,12 @@ class FiscalDuplicateException implements Exception {
 
   @override
   String toString() => 'Receipt already scanned by ${hit.scannerLabel}';
+}
+
+class SoftDuplicateException implements Exception {
+  final FiscalDuplicateHit hit;
+  SoftDuplicateException(this.hit);
+
+  @override
+  String toString() => 'This looks like a receipt you already saved.';
 }

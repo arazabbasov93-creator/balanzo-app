@@ -3,6 +3,7 @@ import '../app_state.dart';
 import '../l10n/app_strings.dart';
 import '../services/analytics_service.dart';
 import '../services/subscription_service.dart';
+import '../config/app_colors.dart';
 
 class UpgradeScreen extends StatefulWidget {
   const UpgradeScreen({super.key});
@@ -40,7 +41,6 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(AppStrings.get('upgrade_success', currentLanguage.value)),
-          backgroundColor: const Color(0xFF1B5E20),
         ),
       );
       Navigator.of(context).pop();
@@ -66,7 +66,6 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
           AppStrings.get('upgrade_screen_title', lang),
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: const Color(0xFF1B5E20),
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -79,12 +78,15 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1B5E20), Color(0xFF4CAF50)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
+                gradient: LinearGradient(
+          colors: [
+            AppColors.primaryGreen(Theme.of(context).brightness),
+            AppColors.gradientEnd(Theme.of(context).brightness),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
                 children: [
@@ -118,7 +120,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
             const SizedBox(height: 10),
             _PaidPlanCard(
               title: AppStrings.get('ai_premium', lang),
-              color: const Color(0xFF1B5E20),
+              color: AppColors.primaryGreenDark,
               badge: AppStrings.get('upgrade_most_popular', lang),
               featureColor: const Color(0xFF212121),
               features: AppStrings.upgradeAiPremiumFeatures(lang),
@@ -133,7 +135,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
             const SizedBox(height: 10),
             _PaidPlanCard(
               title: AppStrings.get('family_plan', lang),
-              color: const Color(0xFF1B5E20),
+              color: AppColors.primaryGreenDark,
               featureColor: const Color(0xFF212121),
               features: AppStrings.upgradeFamilyFeatures(lang),
               monthlyPrice: SubscriptionService.familyPlanMonthly,
@@ -151,10 +153,12 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                 child: ElevatedButton(
                   onPressed: _loading ? null : _upgrade,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1B5E20),
+                    backgroundColor: AppColors.primaryGreen(
+                      Theme.of(context).brightness,
+                    ),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   child: _loading
                       ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
@@ -321,7 +325,7 @@ class _PaidPlanCard extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
                             color: Colors.amber.shade700,
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
                             badge!,
@@ -360,7 +364,7 @@ class _PaidPlanCard extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: Colors.green.shade300),
                     ),
                     child: Text(
@@ -407,7 +411,7 @@ class _BillingPill extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
         decoration: BoxDecoration(
           color: active ? color : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: active ? color : Colors.grey.shade300),
         ),
         child: Text(

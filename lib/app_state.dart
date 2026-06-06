@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
 
+/// True after Supabase.initialize() succeeds in bootstrap.
+bool supabaseReady = false;
+
+/// Notifies [AuthGateScreen] when bootstrap finishes (avoids stuck offline UI).
+final ValueNotifier<bool> supabaseReadyNotifier = ValueNotifier(false);
+
 final ValueNotifier<String> currentLanguage = ValueNotifier('en');
 final ValueNotifier<ThemeMode> currentThemeMode = ValueNotifier(ThemeMode.light);
 

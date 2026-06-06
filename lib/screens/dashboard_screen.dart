@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../diag_log.dart';
 import '../app_state.dart';
 import '../l10n/app_strings.dart';
 import '../services/auth_service.dart';
@@ -13,6 +14,7 @@ import 'receipts_screen.dart';
 import 'restock_screen.dart';
 import 'ai_chat_screen.dart';
 import 'profile_screen.dart';
+import '../config/app_colors.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -23,51 +25,76 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _tab = 0;
+  final _loadedTabs = {0};
   final _homeTabKey = GlobalKey<_HomeTabState>();
 
   @override
-  Widget build(BuildContext context) {
-    final tabs = [
-      _HomeTab(key: _homeTabKey),
-      ReceiptsScreen(isActive: _tab == 1),
-      const RestockScreen(),
-      AiChatScreen(onBack: () => setState(() => _tab = 0)),
-      const ProfileScreen(),
-    ];
+  void initState() {
+    super.initState();
+    diag('Dashboard.initState tab=$_tab');
+  }
 
+  Widget? _tabWidget(int index) {
+    switch (index) {
+      case 0:
+        return _HomeTab(key: _homeTabKey);
+      case 1:
+        return ReceiptsScreen(isActive: _tab == 1);
+      case 2:
+        return const RestockScreen();
+      case 3:
+        return AiChatScreen(onBack: () => setState(() => _tab = 0));
+      case 4:
+        return const ProfileScreen();
+      default:
+        return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _tab, children: tabs),
+      body: IndexedStack(
+        index: _tab,
+        children: List.generate(5, (i) {
+          if (!_loadedTabs.contains(i)) return const SizedBox.shrink();
+          return _tabWidget(i) ?? const SizedBox.shrink();
+        }),
+      ),
       bottomNavigationBar: ValueListenableBuilder<String>(
         valueListenable: currentLanguage,
         builder: (context2, lang, child2) => NavigationBar(
           selectedIndex: _tab,
-          onDestinationSelected: (i) => setState(() => _tab = i),
+          onDestinationSelected: (i) => setState(() {
+            _tab = i;
+            _loadedTabs.add(i);
+          }),
           backgroundColor: Theme.of(context2).colorScheme.surfaceContainerHighest,
-          indicatorColor: const Color(0xFF1B5E20),
+          indicatorColor: AppColors.primaryGreenDark,
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           destinations: [
             NavigationDestination(
-              icon: const Icon(Icons.home_outlined, color: Color(0xFF8888A0)),
+              icon: const Icon(Icons.home_outlined, color: AppColors.darkOnSurfaceVariant),
               selectedIcon: const Icon(Icons.home, color: Colors.white),
               label: AppStrings.get('nav_home', lang),
             ),
             NavigationDestination(
-              icon: const Icon(Icons.receipt_long_outlined, color: Color(0xFF8888A0)),
+              icon: const Icon(Icons.receipt_long_outlined, color: AppColors.darkOnSurfaceVariant),
               selectedIcon: const Icon(Icons.receipt_long, color: Colors.white),
               label: AppStrings.get('nav_receipts', lang),
             ),
             NavigationDestination(
-              icon: const Icon(Icons.shopping_cart_outlined, color: Color(0xFF8888A0)),
+              icon: const Icon(Icons.shopping_cart_outlined, color: AppColors.darkOnSurfaceVariant),
               selectedIcon: const Icon(Icons.shopping_cart, color: Colors.white),
               label: AppStrings.get('nav_restock', lang),
             ),
             NavigationDestination(
-              icon: const Icon(Icons.smart_toy_outlined, color: Color(0xFF8888A0)),
+              icon: const Icon(Icons.smart_toy_outlined, color: AppColors.darkOnSurfaceVariant),
               selectedIcon: const Icon(Icons.smart_toy, color: Colors.white),
               label: AppStrings.get('nav_ai', lang),
             ),
             NavigationDestination(
-              icon: const Icon(Icons.person_outline, color: Color(0xFF8888A0)),
+              icon: const Icon(Icons.person_outline, color: AppColors.darkOnSurfaceVariant),
               selectedIcon: const Icon(Icons.person, color: Colors.white),
               label: AppStrings.get('nav_profile', lang),
             ),
@@ -93,14 +120,14 @@ class _HomeTabState extends State<_HomeTab> with SingleTickerProviderStateMixin 
   bool _hasFamily = false;
   HomeHeaderSnapshot _headerPersonal = (
     insights: null,
-    incomeTotal: 0,
+    incomeTotal: 0.0,
     cachedName: null,
     periodSelectorEnabled: true,
     noFamily: false,
   );
   HomeHeaderSnapshot _headerFamily = (
     insights: null,
-    incomeTotal: 0,
+    incomeTotal: 0.0,
     cachedName: null,
     periodSelectorEnabled: false,
     noFamily: false,
@@ -109,6 +136,7 @@ class _HomeTabState extends State<_HomeTab> with SingleTickerProviderStateMixin 
   @override
   void initState() {
     super.initState();
+    diag('HomeTab.initState');
     UserProfileService.warmCache();
     UserProfileService.loadFullName();
     CategoryService.refreshCache();
@@ -175,9 +203,12 @@ class _HomeTabState extends State<_HomeTab> with SingleTickerProviderStateMixin 
       body: Column(
         children: [
           Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
+                colors: [
+                  AppColors.primaryGreen(Theme.of(context).brightness),
+                  AppColors.gradientEnd(Theme.of(context).brightness),
+                ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -271,8 +302,8 @@ class _HomeTabState extends State<_HomeTab> with SingleTickerProviderStateMixin 
       ),
       floatingActionButton: _canScanReceipt
           ? FloatingActionButton.extended(
+              heroTag: 'fab_home_add_receipt',
               onPressed: () => showAddReceiptSheet(context, onDone: refresh),
-              backgroundColor: const Color(0xFF1B5E20),
               icon: const Icon(Icons.add, color: Colors.white),
               label: Text(
                 AppStrings.get('add_receipt', lang),

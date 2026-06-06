@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../models/home_insights.dart';
+import '../../utils/currency_data.dart';
 import 'home_detail_sheets.dart';
 
 /// Donut chart for category share of monthly spend (top slices + Other).
@@ -50,13 +51,22 @@ class CategoryDonutChart extends StatelessWidget {
                         color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
-                    Text(
-                      'AZN',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    if (currencySymbol(insights.periodCurrency).isNotEmpty)
+                      Text(
+                        currencySymbol(insights.periodCurrency),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      )
+                    else if (insights.periodCurrency != null)
+                      Text(
+                        insights.periodCurrency!,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),

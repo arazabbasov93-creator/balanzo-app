@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../services/ocr_service.dart';
 import '../services/ekassa_service.dart';
 import 'receipt_result_sheet.dart';
+import '../config/app_colors.dart';
 // HIDDEN: Disabled — requires government DVX API (Phase 2). Do not delete.
 // import 'fiscal_id_screen.dart';
 
@@ -176,9 +177,9 @@ class _ScannerScreenState extends State<ScannerScreen>
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
-      backgroundColor: error ? Colors.red.shade700 : const Color(0xFF1B5E20),
+      backgroundColor: error ? Colors.red.shade700 : AppColors.primaryGreenDark,
       behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ));
   }
 
@@ -334,7 +335,7 @@ class _ScannerOverlayPainter extends CustomPainter {
 
     // Corner markers
     final paint = Paint()
-      ..color = const Color(0xFF4CAF50)
+      ..color = AppColors.green400
       ..strokeWidth = 3.5
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
