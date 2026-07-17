@@ -9,6 +9,7 @@ import '../services/analytics_service.dart';
 import '../services/auth_service.dart';
 import '../services/category_service.dart';
 import '../services/crash_service.dart';
+import '../utils/postgrest_errors.dart';
 import '../config/app_colors.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -32,8 +33,13 @@ class _LoginScreenState extends State<LoginScreen> {
       final user = response.user;
       if (user != null) {
         await AuthService.upsertUser(user);
-        await CategoryService.refreshCache();
-        await CrashService.setUser();
+        try {
+          await CategoryService.refreshCache();
+          await CrashService.setUser();
+        } catch (e) {
+          if (!isIgnorablePostgrestAuthError(e)) rethrow;
+          logIgnorablePostgrestAuthError(e);
+        }
         final createdAt = user.createdAt;
         final isNew = createdAt.isNotEmpty &&
             DateTime.now()
@@ -59,8 +65,13 @@ class _LoginScreenState extends State<LoginScreen> {
       final user = response.user;
       if (user != null) {
         await AuthService.upsertUser(user);
-        await CategoryService.refreshCache();
-        await CrashService.setUser();
+        try {
+          await CategoryService.refreshCache();
+          await CrashService.setUser();
+        } catch (e) {
+          if (!isIgnorablePostgrestAuthError(e)) rethrow;
+          logIgnorablePostgrestAuthError(e);
+        }
         final createdAt = user.createdAt;
         final isNew = createdAt.isNotEmpty &&
             DateTime.now()

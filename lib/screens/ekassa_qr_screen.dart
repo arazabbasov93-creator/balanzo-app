@@ -11,6 +11,8 @@ import 'receipt_save_success_screen.dart';
 import '../config/app_colors.dart';
 
 /// 2D symbologies used on e-kassa receipts — excludes linear product barcodes.
+enum _EkassaMode { qr, fiscalId, manual }
+
 const _ekassa2dFormats = <BarcodeFormat>[
   BarcodeFormat.qrCode,
   BarcodeFormat.dataMatrix,
@@ -33,6 +35,7 @@ class _EkassaQrScreenState extends State<EkassaQrScreen> {
   );
   bool _processing = false;
   String? _status;
+  _EkassaMode _mode = _EkassaMode.qr;
 
   @override
   void dispose() {
@@ -108,6 +111,7 @@ class _EkassaQrScreenState extends State<EkassaQrScreen> {
     final result = await showModalBottomSheet<Object?>(
       context: context,
       isScrollControlled: true,
+      isDismissible: false,
       backgroundColor: Colors.transparent,
       builder: (_) => ReceiptResultSheet(
         receipt: receipt,
@@ -180,66 +184,130 @@ class _EkassaQrScreenState extends State<EkassaQrScreen> {
             ),
           ),
           Positioned(
-            top: 16,
+            top: 72,
             left: 24,
             right: 24,
-            child: Text(
-              AppStrings.get('scan_qr_hint', lang),
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-          ),
-          Positioned(
-            bottom: 32,
-            left: 24,
-            right: 24,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (_status != null)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.7),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      _status!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
-                    ),
-                  ),
-                if (_processing) ...[
-                  const SizedBox(height: 16),
-                  const CircularProgressIndicator(color: AppColors.green400),
-                ],
-                if (!_processing) ...[
-                  const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    onPressed: _openFiscalId,
-                    icon: const Icon(Icons.edit_outlined, size: 18),
-                    label: Text(AppStrings.get('enter_fiscal_manually', lang)),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: const BorderSide(color: AppColors.green300),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    onPressed: _openManualEntry,
-                    icon: const Icon(Icons.receipt_long_outlined, size: 18),
-                    label: Text(AppStrings.get('manual_entry', lang)),
-                    style: TextButton.styleFrom(foregroundColor: Colors.white70),
-                  ),
-                ],
+                _ModeChip(
+                  label: AppStrings.get('scan_qr_code', lang),
+                  selected: _mode == _EkassaMode.qr,
+                  onTap: () => setState(() => _mode = _EkassaMode.qr),
+                ),
+                const SizedBox(width: 8),
+                _ModeChip(
+                  label: AppStrings.get('enter_fiscal_id', lang),
+                  selected: _mode == _EkassaMode.fiscalId,
+                  onTap: () => setState(() => _mode = _EkassaMode.fiscalId),
+                ),
+                const SizedBox(width: 8),
+                _ModeChip(
+                  label: AppStrings.get('manual_entry', lang),
+                  selected: _mode == _EkassaMode.manual,
+                  onTap: () => setState(() => _mode = _EkassaMode.manual),
+                ),
               ],
             ),
           ),
+          if (_mode == _EkassaMode.qr)
+            Positioned(
+              top: 16,
+              left: 24,
+              right: 24,
+              child: Text(
+                AppStrings.get('scan_qr_hint', lang),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+            ),
+          if (_mode == _EkassaMode.qr)
+            Positioned(
+              bottom: 32,
+              left: 24,
+              right: 24,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_status != null)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _status!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                      ),
+                    ),
+                  if (_processing) ...[
+                    const SizedBox(height: 16),
+                    const CircularProgressIndicator(color: AppColors.green400),
+                  ],
+                  if (!_processing) ...[
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: _openFiscalId,
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      label: Text(AppStrings.get('enter_fiscal_manually', lang)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: AppColors.green300),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: _openManualEntry,
+                      icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                      label: Text(AppStrings.get('manual_entry', lang)),
+                      style: TextButton.styleFrom(foregroundColor: Colors.white70),
+                    ),
+                  ],
+                ],
+              ),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+class _ModeChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ModeChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.primaryGreenDark : Colors.white24,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ),
       ),
     );
   }

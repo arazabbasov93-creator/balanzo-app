@@ -134,44 +134,63 @@ CREATE POLICY "categories_delete_own"
   USING (auth.uid() = user_id AND is_default = false);
 
 -- ── FAMILIES ──────────────────────────────────────────────────
--- owner_user_id = creator of the family
+-- created_by = creator; members access via family_members join.
+-- See supabase_schema_migration.sql for consolidated policies.
 
-CREATE POLICY "families_select_own"
+CREATE POLICY "families_select"
   ON families FOR SELECT
-  USING (auth.uid() = owner_user_id);
+  USING (
+    auth.uid() = created_by
+    OR id IN (SELECT family_id FROM family_members WHERE user_id = auth.uid())
+  );
 
-CREATE POLICY "families_insert_own"
+CREATE POLICY "families_insert"
   ON families FOR INSERT
-  WITH CHECK (auth.uid() = owner_user_id);
+  WITH CHECK (auth.uid() = created_by);
 
-CREATE POLICY "families_update_own"
+CREATE POLICY "families_update"
   ON families FOR UPDATE
-  USING (auth.uid() = owner_user_id);
+  USING (
+    auth.uid() = created_by
+    OR id IN (
+      SELECT family_id FROM family_members
+      WHERE user_id = auth.uid() AND role IN ('admin', 'co_admin')
+    )
+  );
 
-CREATE POLICY "families_delete_own"
+CREATE POLICY "families_delete"
   ON families FOR DELETE
-  USING (auth.uid() = owner_user_id);
+  USING (auth.uid() = created_by);
 
 -- ── FAMILY_MEMBERS ────────────────────────────────────────────
 
 CREATE POLICY "family_members_select"
   ON family_members FOR SELECT
   USING (
-    auth.uid() IN (SELECT owner_user_id FROM families WHERE id = family_id)
+    auth.uid() IN (SELECT created_by FROM families WHERE id = family_id)
     OR auth.uid() = user_id
+    OR family_id IN (SELECT family_id FROM family_members fm WHERE fm.user_id = auth.uid())
   );
 
 CREATE POLICY "family_members_insert"
   ON family_members FOR INSERT
   WITH CHECK (
-    auth.uid() IN (SELECT owner_user_id FROM families WHERE id = family_id)
+    auth.uid() IN (SELECT created_by FROM families WHERE id = family_id)
+    OR auth.uid() IN (
+      SELECT user_id FROM family_members
+      WHERE family_id = family_members.family_id AND role IN ('admin', 'co_admin')
+    )
   );
 
 CREATE POLICY "family_members_delete_self_or_owner"
   ON family_members FOR DELETE
   USING (
     user_id = auth.uid()
-    OR auth.uid() IN (SELECT owner_user_id FROM families WHERE id = family_id)
+    OR auth.uid() IN (SELECT created_by FROM families WHERE id = family_id)
+    OR auth.uid() IN (
+      SELECT user_id FROM family_members fm
+      WHERE fm.family_id = family_members.family_id AND fm.role IN ('admin', 'co_admin')
+    )
   );
 
 -- ── BUDGETS ───────────────────────────────────────────────────

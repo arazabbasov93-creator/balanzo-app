@@ -142,8 +142,9 @@ class LanguagePickerTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lang = languageByCode(selectedCode);
-    return ListTile(
-      tileColor: Colors.transparent,
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
       leading: SizedBox(
         width: 24,
         height: 24,
@@ -172,6 +173,7 @@ class LanguagePickerTile extends StatelessWidget {
         );
         if (picked != null) onSelected(picked);
       },
+    ),
     );
   }
 }

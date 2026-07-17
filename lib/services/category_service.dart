@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/category.dart';
 import 'supabase_access.dart';
+import '../utils/postgrest_errors.dart';
 
 class CategoryService {
   static SupabaseClient get _db => SupabaseAccess.client;
@@ -20,7 +21,11 @@ class CategoryService {
         _cache = await _fetchGlobals();
       }
     } catch (e, st) {
-      debugPrint('[CategoryService] refreshCache failed: $e\n$st');
+      if (isIgnorablePostgrestAuthError(e)) {
+        logIgnorablePostgrestAuthError(e);
+      } else {
+        debugPrint('[CategoryService] refreshCache failed: $e\n$st');
+      }
       _cache = [];
     }
     return cached;
@@ -111,6 +116,26 @@ class CategoryService {
       _cache = _cache.where((c) => c.id != id).toList();
     } catch (e, st) {
       debugPrint('[CategoryService] delete failed: $e\n$st');
+    }
+  }
+
+  static Future<bool> update(
+    String id,
+    String name,
+    String icon,
+    int color,
+  ) async {
+    try {
+      await _db.from('categories').update({
+        'name': name,
+        'icon': icon,
+        'color': color,
+      }).eq('id', id);
+      await refreshCache();
+      return true;
+    } catch (e, st) {
+      debugPrint('[CategoryService.update] $e\n$st');
+      return false;
     }
   }
 }

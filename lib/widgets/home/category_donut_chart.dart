@@ -1,7 +1,10 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../app_state.dart';
+import '../../l10n/app_strings.dart';
 import '../../models/home_insights.dart';
 import '../../utils/currency_data.dart';
+import '../../utils/category_display.dart';
 import 'home_detail_sheets.dart';
 
 /// Donut chart for category share of monthly spend (top slices + Other).
@@ -24,7 +27,8 @@ class CategoryDonutChart extends StatelessWidget {
     final displayTotal = itemSum > 0 ? itemSum : total;
     if (displayTotal <= 0) return const SizedBox.shrink();
 
-    final slices = _slices(displayTotal);
+    final lang = currentLanguage.value;
+    final slices = _slices(displayTotal, lang);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -133,7 +137,7 @@ class CategoryDonutChart extends StatelessWidget {
     );
   }
 
-  List<_Slice> _slices(double displayTotal) {
+  List<_Slice> _slices(double displayTotal, String lang) {
     const maxSlices = 8;
     final top = breakdown.take(maxSlices).toList();
     final otherAmount = breakdown.skip(maxSlices).fold(0.0, (s, c) => s + c.amount);
@@ -146,7 +150,7 @@ class CategoryDonutChart extends StatelessWidget {
         .toList();
     if (otherAmount > 0 && breakdown.length > maxSlices) {
       slices.add(_Slice(
-        label: 'Other',
+        label: AppStrings.get('cat_other', lang),
         share: otherAmount / displayTotal,
         color: const Color(0xFF9E9E9E),
       ));

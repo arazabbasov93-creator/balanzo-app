@@ -1,3 +1,4 @@
+import '../l10n/app_strings.dart';
 import '../models/category.dart';
 import '../models/home_insights.dart';
 import 'category_service.dart';
@@ -378,7 +379,7 @@ class HomeInsightsService {
       final rawName = c?.name ?? (e.key == '_other' ? 'Other' : e.key);
       return CategorySpend(
         key: e.key,
-        name: rawName,
+        name: AppStrings.categoryName(rawName, locale),
         icon: c?.icon ?? 'category',
         color: c?.color ?? 0xFF9E9E9E,
         amount: e.value,

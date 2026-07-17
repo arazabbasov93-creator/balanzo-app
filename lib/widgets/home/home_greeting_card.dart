@@ -11,11 +11,13 @@ class HomeGreetingCard extends StatelessWidget {
   final HomeInsights? insights;
   final double incomeTotal;
   final String? cachedName;
+  final String? familyName;
   final int periodMonth;
   final int periodYear;
   final void Function(int month, int year) onPeriodChanged;
   final bool periodSelectorEnabled;
   final bool attachedToHeader;
+  final bool hidePersonalFinance;
 
   const HomeGreetingCard({
     super.key,
@@ -23,11 +25,13 @@ class HomeGreetingCard extends StatelessWidget {
     required this.insights,
     this.incomeTotal = 0,
     this.cachedName,
+    this.familyName,
     required this.periodMonth,
     required this.periodYear,
     required this.onPeriodChanged,
     this.periodSelectorEnabled = true,
     this.attachedToHeader = false,
+    this.hidePersonalFinance = false,
   });
 
   @override
@@ -42,7 +46,9 @@ class HomeGreetingCard extends StatelessWidget {
         insights!.periodYear == periodYear;
     final spend = periodMatches ? insights!.thisMonthTotal : 0.0;
     final remaining = incomeTotal - spend;
-    final years = List.generate(5, (i) => DateTime.now().year - i);
+    final greetingText = familyName != null && familyName!.trim().isNotEmpty
+        ? familyName!.trim()
+        : AppStrings.warmGreeting(firstName, lang);
 
     return Container(
       width: double.infinity,
@@ -51,17 +57,15 @@ class HomeGreetingCard extends StatelessWidget {
         gradient: attachedToHeader
             ? null
             : LinearGradient(
-          colors: [
-            AppColors.primaryGreen(Theme.of(context).brightness),
-            AppColors.gradientEnd(Theme.of(context).brightness),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+                colors: [
+                  AppColors.primaryGreen(Theme.of(context).brightness),
+                  AppColors.gradientEnd(Theme.of(context).brightness),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
         color: attachedToHeader ? Colors.transparent : null,
-        borderRadius: attachedToHeader
-            ? null
-            : BorderRadius.circular(12),
+        borderRadius: attachedToHeader ? null : BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -69,11 +73,15 @@ class HomeGreetingCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.waving_hand, color: Colors.amber, size: 18),
+              Icon(
+                familyName != null ? Icons.family_restroom : Icons.waving_hand,
+                color: familyName != null ? Colors.white : Colors.amber,
+                size: 18,
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  AppStrings.warmGreeting(firstName, lang),
+                  greetingText,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 15,
@@ -81,46 +89,47 @@ class HomeGreetingCard extends StatelessWidget {
                   ),
                 ),
               ),
-              HomePeriodDropdowns(
+              HomePeriodPickers(
                 month: periodMonth,
                 year: periodYear,
-                years: years,
                 onChanged: onPeriodChanged,
                 enabled: periodSelectorEnabled,
               ),
             ],
           ),
-          if (incomeTotal > 0) ...[
-            const SizedBox(height: 6),
-            Text(
-              '${AppStrings.get('income_total', lang)}: ${formatMoney(incomeTotal, insights?.periodCurrency)}',
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
-            ),
-          ],
-          const SizedBox(height: 4),
-          Text(
-            formatMoney(spend, insights?.periodCurrency),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 26,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -1,
-            ),
-          ),
-          Text(
-            AppStrings.spentInMonth(periodMonth, periodYear, lang),
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
-          ),
-          if (incomeTotal > 0) ...[
+          if (!hidePersonalFinance) ...[
+            if (incomeTotal > 0) ...[
+              const SizedBox(height: 6),
+              Text(
+                '${AppStrings.get('income_total', lang)}: ${formatMoney(incomeTotal, insights?.periodCurrency)}',
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ],
             const SizedBox(height: 4),
             Text(
-              '${AppStrings.get('remaining_balance', lang)}: ${formatMoney(remaining, insights?.periodCurrency)}',
-              style: TextStyle(
-                color: remaining >= 0 ? Colors.lightGreen.shade100 : Colors.amber.shade100,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+              formatMoney(spend, insights?.periodCurrency),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 26,
+                fontWeight: FontWeight.bold,
+                letterSpacing: -1,
               ),
             ),
+            Text(
+              AppStrings.spentInMonth(periodMonth, periodYear, lang),
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+            if (incomeTotal > 0) ...[
+              const SizedBox(height: 4),
+              Text(
+                '${AppStrings.get('remaining_balance', lang)}: ${formatMoney(remaining, insights?.periodCurrency)}',
+                style: TextStyle(
+                  color: remaining >= 0 ? Colors.lightGreen.shade100 : Colors.amber.shade100,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ],
         ],
       ),
@@ -128,18 +137,16 @@ class HomeGreetingCard extends StatelessWidget {
   }
 }
 
-class HomePeriodDropdowns extends StatelessWidget {
+class HomePeriodPickers extends StatelessWidget {
   final int month;
   final int year;
-  final List<int> years;
   final void Function(int month, int year) onChanged;
   final bool enabled;
 
-  const HomePeriodDropdowns({
+  const HomePeriodPickers({
     super.key,
     required this.month,
     required this.year,
-    required this.years,
     required this.onChanged,
     this.enabled = true,
   });
@@ -147,78 +154,275 @@ class HomePeriodDropdowns extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lang = currentLanguage.value;
+    final now = DateTime.now();
+    final years = [now.year, now.year - 1, now.year - 2];
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _MiniDropdown<int>(
-          value: month,
+        _PeriodChip(
+          label: AppStrings.monthName(month, lang),
           enabled: enabled,
-          items: List.generate(12, (i) => i + 1)
-              .map((m) => DropdownMenuItem(
-                    value: m,
-                    child: Text(
-                      AppStrings.monthName(m, lang),
-                      style: const TextStyle(fontSize: 11, color: Colors.white),
-                    ),
-                  ))
-              .toList(),
-          onChanged: enabled
-              ? (m) {
-                  if (m != null) onChanged(m, year);
-                }
+          onTap: enabled
+              ? () => _showMonthSheet(context, lang, month, year, onChanged)
               : null,
         ),
         const SizedBox(width: 4),
-        _MiniDropdown<int>(
-          value: year,
+        _PeriodChip(
+          label: '$year',
           enabled: enabled,
-          items: years
-              .map((y) => DropdownMenuItem(
-                    value: y,
-                    child: Text('$y',
-                        style: const TextStyle(fontSize: 11, color: Colors.white)),
-                  ))
-              .toList(),
-          onChanged: enabled
-              ? (y) {
-                  if (y != null) onChanged(month, y);
-                }
+          onTap: enabled
+              ? () => _showYearSheet(context, lang, years, month, year, onChanged)
               : null,
         ),
       ],
     );
   }
+
+  static void _showMonthSheet(
+    BuildContext context,
+    String lang,
+    int currentMonth,
+    int currentYear,
+    void Function(int month, int year) onChanged,
+  ) {
+    const itemHeight = 44.0;
+    const visibleCount = 3;
+    final controller = FixedExtentScrollController(
+      initialItem: (currentMonth - 1).clamp(0, 11),
+    );
+
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        var selected = currentMonth;
+        return StatefulBuilder(
+          builder: (context, setSheetState) => SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).dividerColor,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    AppStrings.get('select_month', lang),
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: itemHeight * visibleCount,
+                    child: ListWheelScrollView.useDelegate(
+                      controller: controller,
+                      itemExtent: itemHeight,
+                      physics: const FixedExtentScrollPhysics(),
+                      onSelectedItemChanged: (i) => setSheetState(() => selected = i + 1),
+                      childDelegate: ListWheelChildBuilderDelegate(
+                        childCount: 12,
+                        builder: (_, i) {
+                          final m = i + 1;
+                          final isSelected = m == selected;
+                          return GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () {
+                              setSheetState(() => selected = m);
+                              controller.jumpToItem(i);
+                            },
+                            child: Center(
+                              child: Text(
+                                AppStrings.monthName(m, lang),
+                                style: TextStyle(
+                                  fontSize: isSelected ? 16 : 14,
+                                  fontWeight:
+                                      isSelected ? FontWeight.bold : FontWeight.normal,
+                                  color: isSelected
+                                      ? AppColors.primaryGreenDark
+                                      : Theme.of(context).colorScheme.onSurface,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () {
+                        onChanged(selected, currentYear);
+                        Navigator.pop(ctx);
+                      },
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.primaryGreenDark,
+                      ),
+                      child: Text(_confirmLabel(lang)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  static void _showYearSheet(
+    BuildContext context,
+    String lang,
+    List<int> years,
+    int currentMonth,
+    int currentYear,
+    void Function(int month, int year) onChanged,
+  ) {
+    const itemHeight = 44.0;
+    const visibleCount = 2;
+    final initialIndex = years.indexOf(currentYear).clamp(0, years.length - 1);
+    final controller = FixedExtentScrollController(initialItem: initialIndex);
+
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        var selected = currentYear;
+        return StatefulBuilder(
+          builder: (context, setSheetState) => SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).dividerColor,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _yearSheetTitle(lang),
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: itemHeight * visibleCount,
+                    child: ListWheelScrollView.useDelegate(
+                      controller: controller,
+                      itemExtent: itemHeight,
+                      physics: const FixedExtentScrollPhysics(),
+                      onSelectedItemChanged: (i) =>
+                          setSheetState(() => selected = years[i]),
+                      childDelegate: ListWheelChildBuilderDelegate(
+                        childCount: years.length,
+                        builder: (_, i) {
+                          final y = years[i];
+                          final isSelected = y == selected;
+                          return GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () {
+                              setSheetState(() => selected = y);
+                              controller.jumpToItem(i);
+                            },
+                            child: Center(
+                              child: Text(
+                                '$y',
+                                style: TextStyle(
+                                  fontSize: isSelected ? 16 : 14,
+                                  fontWeight:
+                                      isSelected ? FontWeight.bold : FontWeight.normal,
+                                  color: isSelected
+                                      ? AppColors.primaryGreenDark
+                                      : Theme.of(context).colorScheme.onSurface,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () {
+                        onChanged(currentMonth, selected);
+                        Navigator.pop(ctx);
+                      },
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.primaryGreenDark,
+                      ),
+                      child: Text(_confirmLabel(lang)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
-class _MiniDropdown<T> extends StatelessWidget {
-  final T value;
-  final List<DropdownMenuItem<T>> items;
-  final ValueChanged<T?>? onChanged;
-  final bool enabled;
+String _confirmLabel(String lang) => AppStrings.get('confirm', lang);
 
-  const _MiniDropdown({
-    required this.value,
-    required this.items,
-    required this.onChanged,
-    this.enabled = true,
+String _yearSheetTitle(String lang) => AppStrings.get('select_year', lang);
+
+class _PeriodChip extends StatelessWidget {
+  final String label;
+  final bool enabled;
+  final VoidCallback? onTap;
+
+  const _PeriodChip({
+    required this.label,
+    required this.enabled,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
+    return Material(
+      color: Colors.white.withValues(alpha: enabled ? 0.15 : 0.08),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(12),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<T>(
-          value: value,
-          items: items,
-          onChanged: onChanged,
-          dropdownColor: AppColors.gradientEnd(Theme.of(context).brightness),
-          icon: const Icon(Icons.arrow_drop_down, color: Colors.white, size: 16),
-          isDense: true,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: enabled ? Colors.white : Colors.white54,
+                ),
+              ),
+              Icon(
+                Icons.arrow_drop_down,
+                color: enabled ? Colors.white : Colors.white38,
+                size: 16,
+              ),
+            ],
+          ),
         ),
       ),
     );

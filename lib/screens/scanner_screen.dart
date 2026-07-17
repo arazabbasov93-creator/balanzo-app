@@ -146,6 +146,7 @@ class _ScannerScreenState extends State<ScannerScreen>
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
+        isDismissible: false,
         backgroundColor: Colors.transparent,
         builder: (_) => ReceiptResultSheet(
           receipt: receipt,

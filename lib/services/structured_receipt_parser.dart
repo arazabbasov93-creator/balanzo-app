@@ -10,6 +10,8 @@ class StructuredReceiptParser {
     DateTime? date;
     double? total;
     double? vat;
+    double? serviceCharge;
+    double? discountTotal;
     final items = <ReceiptItem>[];
 
     for (final raw in text.split('\n')) {
@@ -32,6 +34,16 @@ class StructuredReceiptParser {
       if (line.startsWith('VAT:')) {
         final m = RegExp(r'([\d.]+)').firstMatch(line.substring(4));
         if (m != null) vat = double.tryParse(m.group(1)!);
+        continue;
+      }
+      if (line.startsWith('SERVICE_CHARGE:')) {
+        final m = RegExp(r'([\d.]+)').firstMatch(line.substring(15));
+        if (m != null) serviceCharge = double.tryParse(m.group(1)!);
+        continue;
+      }
+      if (line.startsWith('DISCOUNT:')) {
+        final m = RegExp(r'([\d.]+)').firstMatch(line.substring(9));
+        if (m != null) discountTotal = double.tryParse(m.group(1)!);
         continue;
       }
       if (!line.startsWith('ITEM:')) continue;
@@ -63,6 +75,8 @@ class StructuredReceiptParser {
       date: date,
       items: items,
       subtotal: subtotal,
+      serviceCharge: serviceCharge,
+      discountTotal: discountTotal,
       vat: vat ?? 0,
       total: total ?? subtotal,
       currency: null,

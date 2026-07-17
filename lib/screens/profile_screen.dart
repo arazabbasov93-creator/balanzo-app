@@ -17,8 +17,10 @@ import 'analytics_screen.dart';
 import 'categories_screen.dart';
 import 'family_screen.dart';
 import 'legal_screen.dart';
+import 'support_screen.dart';
 import 'share_screen.dart';
 import '../config/app_colors.dart';
+import '../widgets/balanzo_header_styles.dart';
 import '../widgets/language_picker_tile.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -215,9 +217,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(AppStrings.get('profile_settings', _language), style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        foregroundColor: Theme.of(context).colorScheme.onSurface,
+        toolbarHeight: BalanzoHeaderStyles.toolbarHeight,
+        title: Text(
+          AppStrings.get('profile_settings', _language),
+          style: BalanzoHeaderStyles.titleStyle.copyWith(color: Colors.white),
+        ),
+        backgroundColor: AppColors.primaryGreen(Theme.of(context).brightness),
+        foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: ListView(
@@ -300,8 +306,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               selectedCode: _language,
               onSelected: _setLanguage,
             ),
-            ListTile(
-              tileColor: Colors.transparent,
+            Material(
+              color: Colors.transparent,
+              child: ListTile(
               leading: SizedBox(
                 width: 24,
                 height: 24,
@@ -321,8 +328,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 activeThumbColor: AppColors.primaryGreenDark,
               ),
             ),
-            ListTile(
-              tileColor: Colors.transparent,
+            ),
+            Material(
+              color: Colors.transparent,
+              child: ListTile(
               leading: SizedBox(
                 width: 24,
                 height: 24,
@@ -344,6 +353,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onChanged: _toggleDarkMode,
                 activeThumbColor: AppColors.primaryGreenDark,
               ),
+            ),
             ),
           ]),
 
@@ -376,6 +386,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           const SizedBox(height: 8),
           _Section(title: 'App', children: [
+            _Tile(
+              icon: Icons.support_agent_outlined,
+              label: AppStrings.get('support', _language),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SupportScreen())),
+            ),
             _Tile(
               icon: Icons.family_restroom_outlined,
               label: AppStrings.get('family', _language),
@@ -475,13 +490,17 @@ class _Section extends StatelessWidget {
             style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurfaceVariant, letterSpacing: 0.8),
           ),
         ),
-        Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Theme.of(context).dividerColor),
+        Material(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+          clipBehavior: Clip.antiAlias,
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: Theme.of(context).dividerColor),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(children: children),
           ),
-          child: Column(children: children),
         ),
         const SizedBox(height: 8),
       ],
@@ -506,8 +525,9 @@ class _Tile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      tileColor: Colors.transparent,
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
       leading: SizedBox(
         width: 24,
         height: 24,
@@ -517,6 +537,7 @@ class _Tile extends StatelessWidget {
       trailing: onTap != null ? Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 18) : null,
       onTap: onTap,
       visualDensity: VisualDensity.standard,
+    ),
     );
   }
 }

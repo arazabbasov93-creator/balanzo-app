@@ -3,6 +3,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'supabase_access.dart';
+import '../utils/postgrest_errors.dart';
 
 class AuthService {
   static SupabaseClient get _supabase => SupabaseAccess.client;
@@ -100,6 +101,10 @@ class AuthService {
       if (name != null) data['full_name'] = name;
       await _supabase.from('users').upsert(data, onConflict: 'id');
     } catch (e, st) {
+      if (isIgnorablePostgrestAuthError(e)) {
+        logIgnorablePostgrestAuthError(e);
+        return;
+      }
       debugPrint('[Auth] upsertUser failed (sign-in still OK): $e\n$st');
     }
   }

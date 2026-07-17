@@ -197,7 +197,9 @@ class TopStoresSection extends StatelessWidget {
       onTap: () => showStoresSheet(context, fullList),
       child: Column(
         children: [
-          ...stores.take(4).map((s) => ListTile(
+          ...stores.take(4).map((s) => Material(
+                color: Colors.transparent,
+                child: ListTile(
                 contentPadding: EdgeInsets.zero,
                 dense: true,
                 leading: CircleAvatar(
@@ -237,7 +239,7 @@ class TopStoresSection extends StatelessWidget {
                     color: AppColors.primaryGreen(Theme.of(context).brightness),
                   ),
                 ),
-              )),
+              ))),
           if (fullList.length > 4)
             Align(
               alignment: Alignment.centerRight,
@@ -270,8 +272,8 @@ class MostBoughtInsights extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (byQuantity.isEmpty && byValue.isEmpty) return const SizedBox.shrink();
     final lang = currentLanguage.value;
+    if (byQuantity.isEmpty && byValue.isEmpty) return const SizedBox.shrink();
 
     return Column(
       children: [
@@ -299,6 +301,19 @@ class MostBoughtInsights extends StatelessWidget {
               products: byValue,
               byQuantity: false,
               insights: insights,
+            ),
+          ),
+        if (byQuantity.isNotEmpty &&
+            byQuantity.every((p) => p.purchaseCount == 1) &&
+            byQuantity.length == 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              AppStrings.get('most_bought_need_more', lang),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
       ],

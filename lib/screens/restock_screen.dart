@@ -5,7 +5,9 @@ import '../app_state.dart';
 import '../l10n/app_strings.dart';
 import '../services/notification_service.dart';
 import '../services/receipt_service.dart';
+import '../utils/product_name_normalizer.dart';
 import '../config/app_colors.dart';
+import '../widgets/balanzo_header_styles.dart';
 
 class RestockScreen extends StatefulWidget {
   const RestockScreen({super.key});
@@ -71,7 +73,16 @@ class _RestockScreenState extends State<RestockScreen> {
             'name_raw, product_name, quantity, unit_price, total_price, purchase_id',
       );
 
-      final byName = <String, List<_Purchase>>{};
+      final clusters = <String, ({String displayName, List<_Purchase> purchases})>{};
+
+      String clusterKeyFor(String rawName) {
+        final norm = ProductNameNormalizer.normalize(rawName);
+        for (final key in clusters.keys) {
+          if (ProductNameNormalizer.similarity(key, norm) >= 0.55) return key;
+        }
+        return norm;
+      }
+
       for (final row in rows) {
         final name = (row['product_name'] as String? ?? row['name_raw'] as String? ?? '')
             .trim();
@@ -83,23 +94,43 @@ class _RestockScreenState extends State<RestockScreen> {
         final unit = (row['unit_price'] as num?)?.toDouble() ?? 0;
         final total = (row['total_price'] as num?)?.toDouble() ?? 0;
         final unitPrice = unit > 0 ? unit : (qty > 0 ? total / qty : total);
-        byName.putIfAbsent(name, () => []).add(
-              _Purchase(date: date, quantity: qty, unitPrice: unitPrice),
-            );
+        final key = clusterKeyFor(name);
+        final existing = clusters[key];
+        final purchase = _Purchase(date: date, quantity: qty, unitPrice: unitPrice);
+        if (existing == null) {
+          clusters[key] = (displayName: name, purchases: [purchase]);
+        } else {
+          existing.purchases.add(purchase);
+          clusters[key] = (
+            displayName: ProductNameNormalizer.canonicalName(
+              [existing.displayName, name],
+            ),
+            purchases: existing.purchases,
+          );
+        }
       }
 
       final items = <_RestockItem>[];
       final now = DateTime.now();
 
-      for (final entry in byName.entries) {
-        if (entry.value.length < 2) continue;
-        final purchases = entry.value..sort((a, b) => a.date.compareTo(b.date));
+      for (final entry in clusters.entries) {
+        final purchases = entry.value.purchases..sort((a, b) => a.date.compareTo(b.date));
+        final purchaseCount = purchases.length;
 
-        double totalGap = 0;
-        for (int i = 1; i < purchases.length; i++) {
-          totalGap += purchases[i].date.difference(purchases[i - 1].date).inDays;
+        double avgDays;
+        if (purchaseCount >= 2) {
+          double totalGap = 0;
+          for (int i = 1; i < purchases.length; i++) {
+            totalGap += purchases[i].date.difference(purchases[i - 1].date).inDays;
+          }
+          avgDays = totalGap / (purchaseCount - 1);
+        } else {
+          // Single-purchase fallback: weekly fuel-like items still get a signal.
+          final isFuelLike = entry.key == 'fuel';
+          final daysSince = now.difference(purchases.last.date).inDays;
+          if (!isFuelLike || daysSince > 45) continue;
+          avgDays = 7;
         }
-        final avgDays = totalGap / (purchases.length - 1);
         if (avgDays <= 0) continue;
 
         final last = purchases.last;
@@ -109,12 +140,12 @@ class _RestockScreenState extends State<RestockScreen> {
             purchases.fold(0.0, (s, p) => s + p.quantity) / purchases.length;
 
         items.add(_RestockItem(
-          name: entry.key,
+          name: entry.value.displayName,
           lastBought: last.date,
           avgDays: avgDays.round(),
           nextDue: nextDue,
           daysUntilDue: daysUntilDue,
-          purchaseCount: purchases.length,
+          purchaseCount: purchaseCount,
           avgQuantity: avgQty,
           latestUnitPrice: last.unitPrice,
         ));
@@ -131,7 +162,11 @@ class _RestockScreenState extends State<RestockScreen> {
       final overdue = items.where((i) => i.daysUntilDue < 0).toList();
       if (overdue.isNotEmpty) {
         try {
-          await NotificationService.sendRestockReminder(overdue.first.name);
+          final item = overdue.first;
+          await NotificationService.sendRestockReminder(
+            itemName: item.name,
+            nextDue: item.nextDue,
+          );
         } catch (e, st) {
           debugPrint('[Restock] notification skipped: $e\n$st');
         }
@@ -191,12 +226,13 @@ class _RestockScreenState extends State<RestockScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
+        toolbarHeight: BalanzoHeaderStyles.toolbarHeight,
         title: Text(
           AppStrings.get('restock', lang),
-          style: const TextStyle(fontWeight: FontWeight.bold),
+          style: BalanzoHeaderStyles.titleStyle.copyWith(color: Colors.white),
         ),
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        foregroundColor: Theme.of(context).colorScheme.onSurface,
+        backgroundColor: AppColors.primaryGreen(Theme.of(context).brightness),
+        foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           IconButton(
@@ -235,7 +271,12 @@ class _RestockScreenState extends State<RestockScreen> {
                         ...dueItems.map((item) => _RestockCard(
                               item: item,
                               lang: lang,
-                              onBought: () => setState(() => _bought.add(item.name)),
+                              onBought: () {
+                                setState(() => _bought.add(item.name));
+                                NotificationService.clearRestockReminderSent(
+                                  item.name,
+                                );
+                              },
                               onIgnore: () => setState(() => _ignored.add(item.name)),
                             )),
                       ],

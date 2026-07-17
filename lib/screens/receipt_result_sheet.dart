@@ -11,9 +11,11 @@ import '../services/receipt_service.dart';
 import '../models/fiscal_duplicate.dart';
 import '../l10n/app_strings.dart';
 import 'receipt_detail_screen.dart';
+import '../utils/category_display.dart';
 import '../utils/icon_mapper.dart';
 import '../utils/receipt_numbers.dart';
 import '../widgets/category_picker_sheet.dart';
+import '../widgets/decimal_text_field.dart';
 import '../widgets/currency_picker_sheet.dart';
 import '../widgets/copyable_fiscal_id.dart';
 import '../utils/currency_data.dart';
@@ -44,24 +46,38 @@ class _EditItem {
   final TextEditingController nameCtrl;
   final TextEditingController qtyCtrl;
   final TextEditingController priceCtrl;
-  final double lineTotal;
   String? categoryId;
   bool editing = false;
+  VoidCallback? _onFieldChange;
 
   _EditItem({
     required String name,
     required double qty,
     required double unitPrice,
-    required double totalPrice,
     this.categoryId,
   })  : nameCtrl = TextEditingController(text: name),
-        lineTotal = totalPrice,
         qtyCtrl = TextEditingController(text: ReceiptNumbers.formatQuantity(qty)),
         priceCtrl = TextEditingController(
           text: ReceiptNumbers.formatUnitPrice(unitPrice),
         );
 
+  double get computedLineTotal {
+    final qty = double.tryParse(qtyCtrl.text) ?? 0.0;
+    final price = double.tryParse(priceCtrl.text) ?? 0.0;
+    return qty * price;
+  }
+
+  void attachListeners(VoidCallback onFieldChange) {
+    _onFieldChange = onFieldChange;
+    qtyCtrl.addListener(_notifyChange);
+    priceCtrl.addListener(_notifyChange);
+  }
+
+  void _notifyChange() => _onFieldChange?.call();
+
   void dispose() {
+    qtyCtrl.removeListener(_notifyChange);
+    priceCtrl.removeListener(_notifyChange);
     nameCtrl.dispose();
     qtyCtrl.dispose();
     priceCtrl.dispose();
@@ -92,11 +108,13 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
             name: item.name,
             qty: item.quantity,
             unitPrice: item.unitPrice,
-            totalPrice: item.totalPrice,
             categoryId: item.categoryId,
           ),
         )
         .toList();
+    for (final e in _editItems) {
+      e.attachListeners(() => setState(() {}));
+    }
     _loadCategories();
     _checkFamily();
     _checkDuplicate();
@@ -150,6 +168,26 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
     super.dispose();
   }
 
+  void _addItem() {
+    setState(() {
+      for (final e in _editItems) {
+        e.editing = false;
+      }
+      final item = _EditItem(name: '', qty: 1, unitPrice: 0);
+      item.attachListeners(() => setState(() {}));
+      item.editing = true;
+      _editItems.add(item);
+    });
+  }
+
+  void _startEdit(int i) {
+    setState(() {
+      for (var j = 0; j < _editItems.length; j++) {
+        _editItems[j].editing = j == i;
+      }
+    });
+  }
+
   void _removeItem(int index) {
     setState(() {
       _editItems[index].dispose();
@@ -158,17 +196,20 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
   }
 
   double get _itemsSubtotal =>
-      _editItems.fold(0.0, (s, e) => s + e.lineTotal);
+      _editItems.fold(0.0, (s, e) => s + e.computedLineTotal);
 
   double get _displayTotal {
     final header = _receipt.total;
     final ekassa = _receipt.isGovernmentVerified ||
         (_receipt.documentId != null && _receipt.documentId!.isNotEmpty);
     if (_editItems.isEmpty) return header;
+    final withCharges = _itemsSubtotal +
+        (_receipt.serviceCharge ?? 0) -
+        (_receipt.discountTotal ?? 0);
     if (ekassa && header > _itemsSubtotal + 0.5 && header < _itemsSubtotal * 3) {
       return header;
     }
-    return _itemsSubtotal + (_receipt.serviceCharge ?? 0);
+    return withCharges;
   }
 
   Receipt _buildEditedReceipt() {
@@ -179,7 +220,7 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
         name: e.nameCtrl.text.trim().isEmpty ? '?' : e.nameCtrl.text.trim(),
         quantity: qty,
         unitPrice: unitPrice,
-        totalPrice: e.lineTotal,
+        totalPrice: e.computedLineTotal,
         categoryId: e.categoryId,
       );
     }).toList();
@@ -197,12 +238,15 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
       items: items,
       subtotal: subtotal,
       serviceCharge: _receipt.serviceCharge,
+      discountTotal: _receipt.discountTotal,
       vat: _receipt.vat,
       total: items.isEmpty
           ? headerTotal
           : useHeaderTotal
               ? headerTotal
-              : subtotal + (_receipt.serviceCharge ?? 0),
+              : subtotal +
+                  (_receipt.serviceCharge ?? 0) -
+                  (_receipt.discountTotal ?? 0),
       currency: _receipt.currency,
       isGovernmentVerified: _receipt.isGovernmentVerified,
       documentId: _receipt.documentId,
@@ -328,6 +372,7 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
           items: _receipt.items,
           subtotal: _receipt.subtotal,
           serviceCharge: _receipt.serviceCharge,
+          discountTotal: _receipt.discountTotal,
           vat: _receipt.vat,
           total: _receipt.total,
           currency: selected,
@@ -444,14 +489,18 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
   @override
   Widget build(BuildContext context) {
     final receipt = _receipt;
+    final colorScheme = Theme.of(context).colorScheme;
+    final onSurface = colorScheme.onSurface;
+    final onSurfaceVariant = colorScheme.onSurfaceVariant;
+    final lang = currentLanguage.value;
     return DraggableScrollableSheet(
       initialChildSize: 0.65,
       minChildSize: 0.4,
       maxChildSize: 0.92,
       builder: (_, controller) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
         ),
         child: Column(
           children: [
@@ -515,34 +564,34 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'STORE',
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
-                            color: Colors.black45,
+                            color: onSurfaceVariant,
                             letterSpacing: 1.2,
                           ),
                         ),
                         const SizedBox(height: 2),
                         TextField(
                           controller: _storeCtrl,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            color: Colors.black,
+                            color: onSurface,
                           ),
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             border: InputBorder.none,
                             isDense: true,
                             contentPadding: EdgeInsets.zero,
                             hintText: 'Tap to enter store name',
                             hintStyle: TextStyle(
                               fontSize: 20,
-                              color: Colors.black38,
+                              color: onSurfaceVariant,
                               fontWeight: FontWeight.bold,
                             ),
-                            suffixIcon: Icon(Icons.edit, size: 14, color: Colors.black38),
+                            suffixIcon: Icon(Icons.edit, size: 14, color: onSurfaceVariant),
                           ),
                         ),
                         InkWell(
@@ -560,7 +609,7 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                                   style: TextStyle(
                                     fontSize: 13,
                                     color: _purchaseDate != null
-                                        ? Colors.black54
+                                        ? onSurfaceVariant
                                         : Colors.orange.shade800,
                                     fontWeight: _purchaseDate == null
                                         ? FontWeight.w600
@@ -568,8 +617,8 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                                   ),
                                 ),
                                 const SizedBox(width: 4),
-                                const Icon(Icons.calendar_today_outlined,
-                                    size: 14, color: Colors.black38),
+                                Icon(Icons.calendar_today_outlined,
+                                    size: 14, color: onSurfaceVariant),
                               ],
                             ),
                           ),
@@ -606,12 +655,12 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                           style: TextStyle(
                             fontSize: 13,
                             color: receipt.currency != null
-                                ? Colors.black87
+                                ? onSurface
                                 : Colors.orange.shade800,
                           ),
                         ),
                       ),
-                      const Icon(Icons.expand_more, size: 18, color: Colors.black38),
+                      Icon(Icons.expand_more, size: 18, color: onSurfaceVariant),
                     ],
                   ),
                 ),
@@ -621,45 +670,76 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
             Expanded(
               child: !_categoriesReady
                   ? const Center(child: CircularProgressIndicator())
-                  : _editItems.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.delete_sweep_outlined,
-                              size: 40, color: Colors.black38),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'All items removed',
-                            style: TextStyle(color: Colors.black54),
+                  : Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton.icon(
+                                onPressed: _addItem,
+                                icon: const Icon(Icons.add, size: 18),
+                                label: const Text('Add Item'),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AppColors.primaryGreenDark,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Tap Save to keep receipt total only, or Retake',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      controller: controller,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      itemCount: _editItems.length,
-                      itemBuilder: (_, i) => _buildItemRow(i),
+                        ),
+                        Expanded(
+                          child: _editItems.isEmpty
+                              ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.delete_sweep_outlined,
+                                          size: 40, color: onSurfaceVariant),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'All items removed',
+                                        style: TextStyle(color: onSurfaceVariant),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Tap Save to keep receipt total only, or Retake',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : ListView.builder(
+                                  controller: controller,
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 20),
+                                  itemCount: _editItems.length,
+                                  itemBuilder: (_, i) => _buildItemRow(
+                                    i,
+                                    onSurface: onSurface,
+                                    onSurfaceVariant: onSurfaceVariant,
+                                    lang: lang,
+                                  ),
+                                ),
+                        ),
+                      ],
                     ),
             ),
             if (receipt.serviceCharge != null && receipt.serviceCharge! > 0) ...[
-              const Divider(color: Colors.black12, height: 1),
+              Divider(color: colorScheme.outlineVariant, height: 1),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Subtotal',
-                        style: TextStyle(fontSize: 13, color: Colors.black54)),
+                    Text('Subtotal',
+                        style: TextStyle(fontSize: 13, color: onSurfaceVariant)),
                     Text(formatMoney(receipt.subtotal, receipt.currency),
-                        style: const TextStyle(fontSize: 13, color: Colors.black54)),
+                        style: TextStyle(fontSize: 13, color: onSurfaceVariant)),
                   ],
                 ),
               ),
@@ -668,14 +748,14 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Service charge',
-                        style: TextStyle(fontSize: 13, color: Colors.black54)),
+                    Text('Service charge',
+                        style: TextStyle(fontSize: 13, color: onSurfaceVariant)),
                     Text('+${formatMoney(receipt.serviceCharge!, receipt.currency)}',
-                        style: const TextStyle(fontSize: 13, color: Colors.black54)),
+                        style: TextStyle(fontSize: 13, color: onSurfaceVariant)),
                   ],
                 ),
               ),
-              const Divider(color: Colors.black12, height: 1),
+              Divider(color: colorScheme.outlineVariant, height: 1),
               const SizedBox(height: 4),
             ],
             SafeArea(
@@ -686,12 +766,12 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (_hasFamily) ...[
-                      const Text(
+                      Text(
                         'Save as',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: Colors.black54,
+                          color: onSurfaceVariant,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -777,7 +857,12 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
     );
   }
 
-  Widget _buildItemRow(int i) {
+  Widget _buildItemRow(
+    int i, {
+    required Color onSurface,
+    required Color onSurfaceVariant,
+    required String lang,
+  }) {
     final edit = _editItems[i];
     if (edit.editing) {
       return Padding(
@@ -797,28 +882,28 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
             Row(
               children: [
                 Expanded(
-                  child: TextField(
+                  child: DecimalTextField(
                     controller: edit.qtyCtrl,
                     decoration: const InputDecoration(
                       labelText: 'Qty',
                       isDense: true,
                       border: OutlineInputBorder(),
                     ),
-                    keyboardType: TextInputType.number,
                     style: const TextStyle(fontSize: 13),
+                    onChanged: (_) => setState(() {}),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: TextField(
+                  child: DecimalTextField(
                     controller: edit.priceCtrl,
                     decoration: const InputDecoration(
                       labelText: 'Unit price',
                       isDense: true,
                       border: OutlineInputBorder(),
                     ),
-                    keyboardType: TextInputType.number,
                     style: const TextStyle(fontSize: 13),
+                    onChanged: (_) => setState(() {}),
                   ),
                 ),
                 IconButton(
@@ -839,7 +924,7 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
 
     final qty = double.tryParse(edit.qtyCtrl.text) ?? 1.0;
     final unitPrice = double.tryParse(edit.priceCtrl.text) ?? 0.0;
-    final totalPrice = edit.lineTotal;
+    final totalPrice = edit.computedLineTotal;
     final cat = _categoryFor(edit.categoryId) ??
         _categoryFor(CategoryMatcher.otherCategoryId(_categories));
 
@@ -854,12 +939,12 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
               children: [
                 Text(
                   edit.nameCtrl.text,
-                  style: const TextStyle(fontSize: 14, color: Colors.black87),
+                  style: TextStyle(fontSize: 14, color: onSurface),
                 ),
                 if (qty != 1.0)
                   Text(
                     '${ReceiptNumbers.formatQuantity(qty)} × ${ReceiptNumbers.formatUnitPrice(unitPrice)}',
-                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                    style: TextStyle(fontSize: 12, color: onSurfaceVariant),
                   ),
                 const SizedBox(height: 4),
                 InkWell(
@@ -871,7 +956,7 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                     decoration: BoxDecoration(
                       color: cat != null
                           ? Color(cat.color).withValues(alpha: 0.12)
-                          : Colors.grey.shade100,
+                          : Theme.of(context).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -884,21 +969,25 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
                             color: Color(cat.color),
                           )
                         else
-                          const Icon(Icons.category_outlined,
-                              size: 12, color: Colors.black45),
+                          Icon(Icons.category_outlined,
+                              size: 12, color: onSurfaceVariant),
                         const SizedBox(width: 4),
                         Text(
-                          cat?.name ?? 'Other',
+                          displayCategoryNameById(
+                            edit.categoryId,
+                            _categories,
+                            lang,
+                          ),
                           style: TextStyle(
                             fontSize: 11,
                             color: cat != null
                                 ? Color(cat.color)
-                                : Colors.black54,
+                                : onSurfaceVariant,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                         const SizedBox(width: 2),
-                        const Icon(Icons.expand_more, size: 14, color: Colors.black38),
+                        Icon(Icons.expand_more, size: 14, color: onSurfaceVariant),
                       ],
                     ),
                   ),
@@ -908,10 +997,10 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
           ),
           Text(
             ReceiptNumbers.formatLineTotal(totalPrice),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.bold,
-              color: Colors.black87,
+              color: onSurface,
             ),
           ),
           IconButton(
@@ -922,10 +1011,10 @@ class _ReceiptResultSheetState extends State<ReceiptResultSheet> {
             onPressed: () => _removeItem(i),
           ),
           IconButton(
-            icon: const Icon(Icons.edit_outlined, size: 16, color: Colors.black54),
+            icon: Icon(Icons.edit_outlined, size: 16, color: onSurfaceVariant),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            onPressed: () => setState(() => edit.editing = true),
+            onPressed: () => _startEdit(i),
           ),
         ],
       ),
@@ -948,6 +1037,7 @@ class _SaveScopeChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
     return Material(
       color: selected ? AppColors.green100 : Colors.grey.shade100,
       borderRadius: BorderRadius.circular(12),
@@ -969,7 +1059,7 @@ class _SaveScopeChip extends StatelessWidget {
               Icon(
                 icon,
                 size: 16,
-                color: selected ? AppColors.primaryGreenDark : Colors.black54,
+                color: selected ? AppColors.primaryGreenDark : onSurfaceVariant,
               ),
               const SizedBox(width: 6),
               Text(
@@ -977,7 +1067,7 @@ class _SaveScopeChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: selected ? AppColors.primaryGreenDark : Colors.black54,
+                  color: selected ? AppColors.primaryGreenDark : onSurfaceVariant,
                 ),
               ),
             ],

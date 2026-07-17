@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import '../app_state.dart';
+import '../l10n/app_strings.dart';
 import '../models/category.dart';
 import '../services/category_service.dart';
+import '../utils/category_display.dart';
 import '../utils/icon_mapper.dart';
 import '../config/app_colors.dart';
 
@@ -277,7 +280,9 @@ class _CategoryPickerSheetState extends State<CategoryPickerSheet> {
                       backgroundColor: Color(cat.color).withValues(alpha: 0.15),
                       child: Icon(iconForName(cat.icon), color: Color(cat.color), size: 16),
                     ),
-                    title: Text(cat.name),
+                    title: Text(
+                      displayCategoryName(cat, currentLanguage.value),
+                    ),
                     trailing: cat.id == widget.selectedId
                         ? Icon(Icons.check, color: AppColors.primaryGreen(brightness))
                         : null,

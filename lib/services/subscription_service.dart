@@ -84,15 +84,42 @@ class SubscriptionService {
     await prefs.setString(_tierKey, tierStr);
   }
 
+  static const _testBypassEmails = {'araz.abbasov93@gmail.com'};
+  static const int premiumMonthlyMessageLimit = 20;
+
+  static Future<bool> _isTestBypassUser() async {
+    final email = _supabase.auth.currentUser?.email?.trim().toLowerCase();
+    return email != null && _testBypassEmails.contains(email);
+  }
+
   static Future<AiAccessResult> checkAiAccess() async {
     try {
-      final tier = await fetchTier();
-      if (tier != SubscriptionTier.free) {
-        return AiAccessResult(allowed: true, tier: tier, dataWindowDays: 90);
+      if (await _isTestBypassUser()) {
+        final tier = await fetchTier();
+        return AiAccessResult(
+          allowed: true,
+          tier: tier,
+          dataWindowDays: 90,
+          premiumUnlimited: true,
+        );
       }
 
+      final tier = await fetchTier();
       final uid = _supabase.auth.currentUser?.id;
       if (uid == null) return AiAccessResult(allowed: false, tier: tier);
+
+      if (tier != SubscriptionTier.free) {
+        final used = await fetchPremiumMonthlyCount(uid);
+        final allowed = used < premiumMonthlyMessageLimit;
+        return AiAccessResult(
+          allowed: allowed,
+          tier: tier,
+          dataWindowDays: 90,
+          premiumMessagesUsed: used,
+          premiumMessagesLimit: premiumMonthlyMessageLimit,
+          monthResetsOn: _nextMonthStart(),
+        );
+      }
 
       final userRow = await _supabase
           .from('users')
@@ -128,10 +155,49 @@ class SubscriptionService {
     }
   }
 
+  /// Premium monthly cap — separate from free-tier weekly `ai_usage.question_count`.
+  static Future<int> fetchPremiumMonthlyCount(String userId) async {
+    try {
+      final monthStr = _monthStart().toIso8601String().substring(0, 10);
+      final row = await _supabase
+          .from('ai_premium_usage')
+          .select('message_count')
+          .eq('user_id', userId)
+          .eq('month_start', monthStr)
+          .maybeSingle();
+      return (row?['message_count'] as int?) ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  static Future<void> incrementPremiumAiUsage(int currentUsed) async {
+    try {
+      final uid = _supabase.auth.currentUser?.id;
+      if (uid == null) return;
+      final monthStr = _monthStart().toIso8601String().substring(0, 10);
+      await _supabase.from('ai_premium_usage').upsert({
+        'user_id': uid,
+        'month_start': monthStr,
+        'message_count': currentUsed + 1,
+      }, onConflict: 'user_id,month_start');
+    } catch (_) {}
+  }
+
   static DateTime _weekStart() {
     final now = DateTime.now();
     final daysFromMonday = (now.weekday - 1) % 7;
     return DateTime(now.year, now.month, now.day - daysFromMonday);
+  }
+
+  static DateTime _monthStart() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, 1);
+  }
+
+  static DateTime _nextMonthStart() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month + 1, 1);
   }
 }
 
@@ -149,6 +215,10 @@ class AiAccessResult {
   final int questionsUsed;
   final int questionsLimit;
   final bool isLoyalUser;
+  final int premiumMessagesUsed;
+  final int premiumMessagesLimit;
+  final bool premiumUnlimited;
+  final DateTime? monthResetsOn;
 
   const AiAccessResult({
     required this.allowed,
@@ -157,5 +227,13 @@ class AiAccessResult {
     this.questionsUsed = 0,
     this.questionsLimit = 1,
     this.isLoyalUser = false,
+    this.premiumMessagesUsed = 0,
+    this.premiumMessagesLimit = 0,
+    this.premiumUnlimited = false,
+    this.monthResetsOn,
   });
+
+  int get premiumMessagesLeft => premiumUnlimited
+      ? premiumMessagesLimit
+      : (premiumMessagesLimit - premiumMessagesUsed).clamp(0, premiumMessagesLimit);
 }

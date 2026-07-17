@@ -189,7 +189,7 @@ class _MetricCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 11, color: Colors.black54)),
+          Text(label, style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ],
       ),
     );
@@ -204,10 +204,13 @@ class _BarChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final maxVal = monthlyTotals.values.fold(0.0, (a, b) => a > b ? a : b);
     if (maxVal == 0) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Text('No data yet', style: TextStyle(color: Colors.black54)),
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            'No data yet',
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ),
         ),
       );
     }
@@ -240,7 +243,10 @@ class _BarChart extends StatelessWidget {
                             padding: const EdgeInsets.only(bottom: 4),
                             child: Text(
                               e.value.toStringAsFixed(0),
-                              style: const TextStyle(fontSize: 9, color: Colors.black54),
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
                               textAlign: TextAlign.center,
                             ),
                           ),
@@ -276,7 +282,7 @@ class _BarChart extends StatelessWidget {
                         fontSize: 10,
                         color: k == monthlyTotals.keys.last
                             ? AppColors.primaryGreenDark
-                            : Colors.black54,
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
                         fontWeight: k == monthlyTotals.keys.last
                             ? FontWeight.bold
                             : FontWeight.normal,

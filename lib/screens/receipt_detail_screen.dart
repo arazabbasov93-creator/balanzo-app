@@ -4,9 +4,12 @@ import '../app_state.dart';
 import '../models/receipt.dart';
 import '../models/category.dart';
 import '../services/category_matcher.dart';
-import '../services/receipt_service.dart';
+import '../services/support_service.dart';
+import '../l10n/app_strings.dart';
+import '../utils/category_display.dart';
 import '../services/category_service.dart';
 import '../services/family_service.dart';
+import '../services/receipt_service.dart';
 import '../utils/receipt_numbers.dart';
 import '../widgets/category_picker_sheet.dart';
 import '../widgets/currency_picker_sheet.dart';
@@ -23,6 +26,7 @@ class _ItemEdit {
   final TextEditingController qtyCtrl;
   final TextEditingController priceCtrl;
   final double lineTotal;
+  String? categoryId;
 
   _ItemEdit({
     this.id,
@@ -30,10 +34,12 @@ class _ItemEdit {
     required double qty,
     required double price,
     required double totalPrice,
+    String? categoryId,
   })  : nameCtrl = TextEditingController(text: name),
         lineTotal = totalPrice,
         qtyCtrl = TextEditingController(text: ReceiptNumbers.formatQuantity(qty)),
-        priceCtrl = TextEditingController(text: ReceiptNumbers.formatUnitPrice(price));
+        priceCtrl = TextEditingController(text: ReceiptNumbers.formatUnitPrice(price)),
+        categoryId = categoryId;
 
   void dispose() {
     nameCtrl.dispose();
@@ -65,10 +71,10 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
   // Edit mode state
   bool _editMode = false;
   bool _saving = false;
-  bool _refreshing = false;
   bool _scopeUpdating = false;
   TextEditingController? _storeCtrl;
   TextEditingController? _dateCtrl;
+  String? _editCurrency;
   List<_ItemEdit> _itemEdits = [];
 
   @override
@@ -92,7 +98,11 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
       categories: cats,
       hasFamily: family != null,
     );
-    _cachedData = data;
+    if (mounted) {
+      setState(() => _cachedData = data);
+    } else {
+      _cachedData = data;
+    }
     return data;
   }
 
@@ -104,6 +114,7 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
     final row = data.row;
     _storeCtrl = TextEditingController(text: row['store_name'] as String? ?? '');
     _dateCtrl = TextEditingController(text: row['purchase_date'] as String? ?? '');
+    _editCurrency = row['currency'] as String? ?? widget.receipt.currency;
     final dbItems = (row['receipt_items'] as List? ?? []).cast<Map<String, dynamic>>();
     _itemEdits = dbItems
         .map((item) => _ItemEdit(
@@ -115,9 +126,24 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
               qty: (item['quantity'] as num?)?.toDouble() ?? 1.0,
               price: (item['unit_price'] as num?)?.toDouble() ?? 0.0,
               totalPrice: (item['total_price'] as num?)?.toDouble() ?? 0.0,
+              categoryId: _resolveCategory(item, data.categories),
             ))
         .toList();
     setState(() => _editMode = true);
+  }
+
+  String? _resolveCategory(Map<String, dynamic> item, List<Category> categories) {
+    final id = item['category_id'] as String?;
+    if (id != null && id.isNotEmpty) return id;
+    final label = item['category'] as String?;
+    if (label == null || label.isEmpty) return null;
+    try {
+      return categories.firstWhere(
+        (c) => c.name.trim().toLowerCase() == label.trim().toLowerCase(),
+      ).id;
+    } catch (_) {
+      return null;
+    }
   }
 
   void _disposeEditControllers() {
@@ -125,6 +151,7 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
     _storeCtrl = null;
     _dateCtrl?.dispose();
     _dateCtrl = null;
+    _editCurrency = null;
     for (final e in _itemEdits) {
       e.dispose();
     }
@@ -148,6 +175,12 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
         'purchase_date': _dateCtrl!.text.trim().isEmpty ? null : _dateCtrl!.text.trim(),
       }).eq('id', widget.receiptId);
 
+      final savedCurrency =
+          _cachedData?.row['currency'] as String? ?? widget.receipt.currency;
+      if (_editCurrency != savedCurrency) {
+        await ReceiptService.updateCurrency(widget.receiptId, _editCurrency);
+      }
+
       // Determine which DB item IDs are still present
       final keptIds = _itemEdits.where((e) => e.id != null).map((e) => e.id!).toSet();
       final dbItems = (_cachedData?.row['receipt_items'] as List? ?? [])
@@ -170,6 +203,7 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
           'quantity': qty,
           'unit_price': unitPrice,
           'total_price': edit.lineTotal,
+          'category_id': edit.categoryId,
         };
         if (edit.id != null) {
           await supabase.from('receipt_items').update(payload).eq('id', edit.id!);
@@ -252,23 +286,13 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
                 ],
               ]
             : [
-                if (_cachedData?.row['fiscal_id'] != null)
-                  IconButton(
-                    icon: _refreshing
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Icon(Icons.sync),
-                    tooltip: 'Refresh from e-kassa',
-                    onPressed: _refreshing || _cachedData == null
-                        ? null
-                        : () => _confirmRefreshFromEkassa(_cachedData!),
-                  ),
+                IconButton(
+                  icon: const Icon(Icons.flag_outlined),
+                  tooltip: AppStrings.get('report_receipt', currentLanguage.value),
+                  onPressed: _cachedData == null
+                      ? null
+                      : () => _reportReceipt(_cachedData!),
+                ),
                 IconButton(
                   icon: const Icon(Icons.copy_outlined),
                   tooltip: 'Copy as text',
@@ -319,6 +343,8 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
           receipt: widget.receipt,
           currency: currency,
           fiscalId: data.row['fiscal_id'] as String?,
+          sequenceNumber: (data.row['sequence_number'] as num?)?.toInt() ??
+              widget.receipt.sequenceNumber,
           items: rowItems,
           categories: data.categories,
           hasFamily: data.hasFamily,
@@ -357,6 +383,28 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
             labelText: 'Purchase date (YYYY-MM-DD)',
             border: OutlineInputBorder(),
             isDense: true,
+          ),
+        ),
+        const SizedBox(height: 12),
+        InkWell(
+          onTap: () async {
+            final selected = await showCurrencyPickerSheet(
+              context,
+              initialCurrency: _editCurrency,
+            );
+            if (selected != null) setState(() => _editCurrency = selected);
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: InputDecorator(
+            decoration: const InputDecoration(
+              labelText: 'Currency',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            child: Text(
+              currencyDisplayLabel(_editCurrency),
+              style: const TextStyle(fontSize: 14),
+            ),
           ),
         ),
         const SizedBox(height: 20),
@@ -445,6 +493,35 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  InkWell(
+                    onTap: () async {
+                      final selected = await showCategoryPickerSheet(
+                        context,
+                        categories: _cachedData!.categories,
+                        selectedId: edit.categoryId,
+                      );
+                      setState(() => edit.categoryId = selected);
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Category',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      child: Text(
+                        edit.categoryId == null
+                            ? AppStrings.get('cat_other', currentLanguage.value)
+                            : displayCategoryNameById(
+                                edit.categoryId,
+                                _cachedData!.categories,
+                                currentLanguage.value,
+                              ),
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -516,55 +593,124 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
     if (mounted) _refresh();
   }
 
-  Future<void> _confirmRefreshFromEkassa(_DetailData data) async {
-    final fiscalId = data.row['fiscal_id'] as String?;
-    if (fiscalId == null || fiscalId.isEmpty) return;
+  Future<void> _reportReceipt(_DetailData data) async {
+    final lang = currentLanguage.value;
+    final seq = (data.row['sequence_number'] as num?)?.toInt() ??
+        widget.receipt.sequenceNumber;
 
-    final proceed = await showDialog<bool>(
+    final existing = await SupportService.fetchExistingReport(
+      sequenceNumber: seq,
+      receiptId: widget.receiptId,
+    );
+    if (!mounted) return;
+
+    if (existing != null) {
+      final status = existing['status'] as String? ?? 'open';
+      final statusLabel = status == 'resolved'
+          ? AppStrings.get('support_status_resolved', lang)
+          : AppStrings.get('support_status_open', lang);
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(AppStrings.get('report_already_reported', lang)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (seq != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    '${AppStrings.get('receipt_number', lang)}$seq',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              Text(
+                '${AppStrings.get('report_existing_status', lang)}: $statusLabel',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Text(existing['description'] as String? ?? ''),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(AppStrings.get('cancel', lang)),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(AppStrings.get('report_something_else', lang)),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true || !mounted) return;
+    }
+
+    final ctrl = TextEditingController();
+    final submitted = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Refresh from e-kassa'),
-        content: const Text(
-          'Re-download the official receipt and re-parse line items.\n\n'
-          'Cost: free (government API + on-device OCR). '
-          'Your category edits are kept when item names match.',
+        title: Text(
+          existing != null
+              ? AppStrings.get('report_new_title', lang)
+              : AppStrings.get('report_receipt_title', lang),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (seq != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  '${AppStrings.get('receipt_number', lang)}$seq',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            TextField(
+              controller: ctrl,
+              maxLines: 4,
+              decoration: InputDecoration(
+                hintText: AppStrings.get('report_receipt_hint', lang),
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text(AppStrings.get('cancel', lang)),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Refresh'),
+            child: Text(AppStrings.get('report_receipt_submit', lang)),
           ),
         ],
       ),
     );
-    if (proceed != true || !mounted) return;
-
-    setState(() => _refreshing = true);
+    if (submitted != true || !mounted) return;
     try {
-      await ReceiptService.refreshFromFiscalId(widget.receiptId);
+      await SupportService.submitReceiptReport(
+        description: ctrl.text,
+        receiptId: widget.receiptId,
+        sequenceNumber: seq,
+      );
       if (mounted) {
-        _refresh();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Receipt refreshed from e-kassa'),
-          ),
+          SnackBar(content: Text(AppStrings.get('report_receipt_success', lang))),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Refresh failed: $e'),
-            backgroundColor: Colors.red.shade700,
-          ),
+          SnackBar(content: Text('$e'), backgroundColor: Colors.red.shade700),
         );
       }
     } finally {
-      if (mounted) setState(() => _refreshing = false);
+      ctrl.dispose();
     }
   }
 
@@ -623,6 +769,7 @@ class _ReceiptBody extends StatelessWidget {
   final Receipt receipt;
   final String? currency;
   final String? fiscalId;
+  final int? sequenceNumber;
   final List<Map<String, dynamic>> items;
   final List<Category> categories;
   final bool hasFamily;
@@ -636,6 +783,7 @@ class _ReceiptBody extends StatelessWidget {
     required this.receipt,
     this.currency,
     this.fiscalId,
+    this.sequenceNumber,
     required this.items,
     required this.categories,
     this.hasFamily = false,
@@ -651,7 +799,7 @@ class _ReceiptBody extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        _Header(receipt: receipt, currency: currency),
+        _Header(receipt: receipt, currency: currency, sequenceNumber: sequenceNumber),
         if (onCurrencyChanged != null) ...[
           const SizedBox(height: 8),
           InkWell(
@@ -772,15 +920,16 @@ class _FamilyScopeToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
+        Text(
           'Cost scope',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: Colors.black54,
+            color: onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 8),
@@ -830,8 +979,18 @@ class _ScopeChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final unselectedFg = scheme.onSurfaceVariant;
+    final bg = selected
+        ? (isDark ? scheme.primaryContainer : AppColors.green100)
+        : (isDark ? scheme.surfaceContainerHighest : Colors.grey.shade100);
+    final border = selected
+        ? AppColors.primaryGreen(Theme.of(context).brightness)
+        : scheme.outlineVariant;
+
     return Material(
-      color: selected ? AppColors.green100 : Colors.grey.shade100,
+      color: bg,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -841,7 +1000,7 @@ class _ScopeChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: selected ? AppColors.primaryGreenDark : Colors.grey.shade300,
+              color: border,
               width: selected ? 1.5 : 1,
             ),
           ),
@@ -851,7 +1010,9 @@ class _ScopeChip extends StatelessWidget {
               Icon(
                 icon,
                 size: 16,
-                color: selected ? AppColors.primaryGreenDark : Colors.black54,
+                color: selected
+                    ? AppColors.primaryGreen(Theme.of(context).brightness)
+                    : unselectedFg,
               ),
               const SizedBox(width: 6),
               Text(
@@ -859,7 +1020,9 @@ class _ScopeChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: selected ? AppColors.primaryGreenDark : Colors.black54,
+                  color: selected
+                      ? AppColors.primaryGreen(Theme.of(context).brightness)
+                      : unselectedFg,
                 ),
               ),
             ],
@@ -873,7 +1036,8 @@ class _ScopeChip extends StatelessWidget {
 class _Header extends StatelessWidget {
   final Receipt receipt;
   final String? currency;
-  const _Header({required this.receipt, this.currency});
+  final int? sequenceNumber;
+  const _Header({required this.receipt, this.currency, this.sequenceNumber});
 
   String _formatDate(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
@@ -904,6 +1068,18 @@ class _Header extends StatelessWidget {
                   color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
+              if (sequenceNumber != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '${AppStrings.get('receipt_number', currentLanguage.value)}$sequenceNumber',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
               if (receipt.date != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),

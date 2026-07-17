@@ -13,12 +13,14 @@ class MemberMonthSummary {
   final String displayName;
   final double income;
   final double spend;
+  final double? spendLimit;
 
   const MemberMonthSummary({
     required this.userId,
     required this.displayName,
     required this.income,
     required this.spend,
+    this.spendLimit,
   });
 
   double get remaining => income - spend;

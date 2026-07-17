@@ -3,7 +3,13 @@ import 'package:flutter/services.dart';
 import '../app_state.dart';
 import '../l10n/app_strings.dart';
 import '../models/receipt.dart';
+import '../models/category.dart';
+import '../services/category_service.dart';
 import '../services/receipt_service.dart';
+import '../widgets/category_picker_sheet.dart';
+import '../widgets/currency_picker_sheet.dart';
+import '../utils/currency_data.dart';
+import '../utils/icon_mapper.dart';
 import 'receipt_detail_screen.dart';
 import '../config/app_colors.dart';
 
@@ -17,11 +23,10 @@ class ManualEntryScreen extends StatefulWidget {
 class _ManualEntryScreenState extends State<ManualEntryScreen> {
   final _storeCtrl = TextEditingController();
   DateTime _date = DateTime.now();
-  String _paymentMethod = 'Cash';
+  String _currency = 'AZN';
+  String? _categoryId;
   final List<_ItemRow> _items = [_ItemRow()];
   bool _saving = false;
-
-  static const _paymentMethods = ['Cash', 'Card', 'Online', 'Transfer'];
 
   @override
   void dispose() {
@@ -30,6 +35,14 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
       item.dispose();
     }
     super.dispose();
+  }
+
+  Category? get _selectedCategory {
+    if (_categoryId == null) return null;
+    for (final c in CategoryService.cached) {
+      if (c.id == _categoryId) return c;
+    }
+    return null;
   }
 
   Future<void> _pickDate() async {
@@ -46,6 +59,22 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
       ),
     );
     if (picked != null) setState(() => _date = picked);
+  }
+
+  Future<void> _pickCurrency() async {
+    final selected = await showCurrencyPickerSheet(context, initialCurrency: _currency);
+    if (selected != null) setState(() => _currency = selected);
+  }
+
+  Future<void> _pickCategory() async {
+    await CategoryService.fetchAll();
+    if (!mounted) return;
+    final selected = await showCategoryPickerSheet(
+      context,
+      categories: CategoryService.cached,
+      selectedId: _categoryId,
+    );
+    if (selected != null) setState(() => _categoryId = selected);
   }
 
   void _addItem() {
@@ -79,6 +108,10 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
 
     setState(() => _saving = true);
     try {
+      await CategoryService.fetchAll();
+      final cat = _selectedCategory;
+      final catName = cat?.name;
+
       final items = _items
           .where((i) => i.nameCtrl.text.trim().isNotEmpty)
           .map((i) {
@@ -89,6 +122,8 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
           quantity: qty,
           unitPrice: price,
           totalPrice: qty * price,
+          categoryId: _categoryId,
+          categoryName: catName,
         );
       }).toList();
 
@@ -101,10 +136,11 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
         subtotal: total,
         vat: 0,
         total: total,
-        currency: null,
+        currency: _currency,
       );
 
       final id = await ReceiptService.save(receipt);
+      notifyReceiptsChanged();
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
@@ -129,10 +165,12 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final lang = currentLanguage.value;
+    final cat = _selectedCategory;
     return Scaffold(
       backgroundColor: Theme.of(context).brightness == Brightness.dark ? AppColors.scaffoldDark : AppColors.scaffoldLight,
       appBar: AppBar(
-        title: Text(AppStrings.get('manual_entry', currentLanguage.value), style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(AppStrings.get('manual_entry', lang), style: const TextStyle(fontWeight: FontWeight.bold)),
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -143,7 +181,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _Label(AppStrings.get('store_name', currentLanguage.value)),
+                _Label(AppStrings.get('store_name', lang)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: _storeCtrl,
@@ -151,7 +189,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                   textCapitalization: TextCapitalization.words,
                 ),
                 const SizedBox(height: 16),
-                _Label(AppStrings.get('date_label', currentLanguage.value)),
+                _Label(AppStrings.get('date_label', lang)),
                 const SizedBox(height: 6),
                 InkWell(
                   onTap: _pickDate,
@@ -174,20 +212,65 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                _Label(AppStrings.get('payment_method', currentLanguage.value)),
+                _Label('Currency'),
                 const SizedBox(height: 6),
-                DropdownButtonFormField<String>(
-                  initialValue: _paymentMethod,
-                  decoration: _inputDecoration(''),
-                  items: _paymentMethods.map((m) {
-                    final label = m == 'Cash'
-                        ? AppStrings.get('cash', currentLanguage.value)
-                        : m == 'Card'
-                            ? AppStrings.get('card', currentLanguage.value)
-                            : m;
-                    return DropdownMenuItem(value: m, child: Text(label));
-                  }).toList(),
-                  onChanged: (v) => setState(() => _paymentMethod = v ?? 'Cash'),
+                InkWell(
+                  onTap: _pickCurrency,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.payments_outlined, size: 18, color: Colors.grey),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            currencyDisplayLabel(_currency),
+                            style: const TextStyle(fontSize: 15),
+                          ),
+                        ),
+                        const Icon(Icons.expand_more, size: 20, color: Colors.grey),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _Label(AppStrings.get('categories', lang)),
+                const SizedBox(height: 6),
+                InkWell(
+                  onTap: _pickCategory,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        if (cat != null) ...[
+                          CircleAvatar(
+                            radius: 14,
+                            backgroundColor: Color(cat.color).withValues(alpha: 0.15),
+                            child: Icon(iconForName(cat.icon), size: 16, color: Color(cat.color)),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(cat.name, style: const TextStyle(fontSize: 15))),
+                        ] else
+                          Expanded(
+                            child: Text(
+                              AppStrings.get('select_category', lang),
+                              style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
+                            ),
+                          ),
+                        const Icon(Icons.expand_more, size: 20, color: Colors.grey),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -200,26 +283,52 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(AppStrings.get('items_label', currentLanguage.value), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    Text(AppStrings.get('items_label', lang), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     TextButton.icon(
                       onPressed: _addItem,
                       icon: const Icon(Icons.add, size: 18),
-                      label: Text(AppStrings.get('add_item', currentLanguage.value)),
+                      label: Text(AppStrings.get('add_item', lang)),
                       style: TextButton.styleFrom(foregroundColor: AppColors.primaryGreenDark),
                     ),
                   ],
                 ),
-                // Header row
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                   child: Row(
-                    children: const [
-                      Expanded(flex: 4, child: Text('Item', style: TextStyle(fontSize: 11, color: Colors.black54))),
-                      SizedBox(width: 8),
-                      SizedBox(width: 52, child: Text('Qty', style: TextStyle(fontSize: 11, color: Colors.black54))),
-                      SizedBox(width: 8),
-                      SizedBox(width: 72, child: Text('Price', style: TextStyle(fontSize: 11, color: Colors.black54))),
-                      SizedBox(width: 32),
+                    children: [
+                      Expanded(
+                        flex: 4,
+                        child: Text(
+                          'Item',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 52,
+                        child: Text(
+                          'Qty',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 72,
+                        child: Text(
+                          'Price',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 32),
                     ],
                   ),
                 ),
@@ -234,9 +343,9 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(AppStrings.get('total_label', currentLanguage.value), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(AppStrings.get('total_label', lang), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     Text(
-                      '${_total.toStringAsFixed(2)} AZN',
+                      formatMoney(_total, _currency),
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
@@ -256,7 +365,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
               icon: _saving
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                   : const Icon(Icons.save_outlined, size: 20),
-              label: Text(_saving ? AppStrings.get('saving', currentLanguage.value) : AppStrings.get('save_receipt', currentLanguage.value)),
+              label: Text(_saving ? AppStrings.get('saving', lang) : AppStrings.get('save_receipt', lang)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryGreen(
                   Theme.of(context).brightness,

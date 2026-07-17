@@ -5,8 +5,10 @@ import '../services/receipt_service.dart';
 import '../services/family_service.dart';
 import '../models/receipt.dart';
 import '../widgets/add_receipt_sheet.dart';
+import '../widgets/family_blur_background.dart';
 import 'receipt_detail_screen.dart';
 import '../config/app_colors.dart';
+import '../widgets/balanzo_header_styles.dart';
 import '../utils/currency_data.dart';
 
 class ReceiptsScreen extends StatefulWidget {
@@ -19,8 +21,9 @@ class ReceiptsScreen extends StatefulWidget {
 }
 
 class _ReceiptsScreenState extends State<ReceiptsScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late TabController _tabCtrl;
+  late AnimationController _noFamilyAnim;
   final _searchCtrl = TextEditingController();
   String _query = '';
   bool _hasFamily = false;
@@ -37,6 +40,12 @@ class _ReceiptsScreenState extends State<ReceiptsScreen>
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 2, vsync: this);
+    _noFamilyAnim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2500),
+      lowerBound: 0.0,
+      upperBound: 1.0,
+    );
     _tabCtrl.addListener(_onTabChanged);
     _searchCtrl.addListener(() => setState(() => _query = _searchCtrl.text.toLowerCase()));
     currentLanguage.addListener(_onLangChange);
@@ -149,6 +158,8 @@ class _ReceiptsScreenState extends State<ReceiptsScreen>
     currentLanguage.removeListener(_onLangChange);
     receiptsRevision.removeListener(_onReceiptsChanged);
     _tabCtrl.dispose();
+    _noFamilyAnim.stop();
+    _noFamilyAnim.dispose();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -156,67 +167,57 @@ class _ReceiptsScreenState extends State<ReceiptsScreen>
   @override
   Widget build(BuildContext context) {
     final lang = currentLanguage.value;
+    if (_familyNoFamily && !_noFamilyAnim.isAnimating) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _familyNoFamily && !_noFamilyAnim.isAnimating) {
+          _noFamilyAnim.repeat(reverse: true);
+        }
+      });
+    }
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
+        toolbarHeight: BalanzoHeaderStyles.toolbarHeight,
         title: Text(
           AppStrings.get('receipts', lang),
-          style: const TextStyle(fontWeight: FontWeight.bold),
+          style: BalanzoHeaderStyles.titleStyle.copyWith(color: Colors.white),
         ),
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        foregroundColor: Theme.of(context).colorScheme.onSurface,
+        backgroundColor: AppColors.primaryGreen(Theme.of(context).brightness),
+        foregroundColor: Colors.white,
         elevation: 0,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.refresh, color: Theme.of(context).colorScheme.onSurface),
-            tooltip: AppStrings.get('refresh', lang),
-            onPressed: refresh,
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(96),
-          child: Column(
+        bottom: TabBar(
+          controller: _tabCtrl,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          indicatorColor: Colors.white,
+          labelStyle: BalanzoHeaderStyles.tabLabelStyle,
+          unselectedLabelStyle: BalanzoHeaderStyles.tabUnselectedLabelStyle,
+          tabs: [
+            Tab(text: AppStrings.get('tab_personal', lang)),
+            Tab(text: AppStrings.get('tab_family', lang)),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabCtrl,
+        children: [
+          Column(
             children: [
-              TabBar(
-                controller: _tabCtrl,
-                labelColor: AppColors.primaryGreenDark,
-                unselectedLabelColor:
-                    Theme.of(context).colorScheme.onSurfaceVariant,
-                indicatorColor: AppColors.primaryGreenDark,
-                tabs: [
-                  Tab(text: AppStrings.get('tab_personal', lang)),
-                  Tab(text: AppStrings.get('tab_family', lang)),
-                ],
-              ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                 child: TextField(
                   controller: _searchCtrl,
-                  style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface),
+                  style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
                   decoration: InputDecoration(
                     hintText: AppStrings.get('search_receipts', lang),
-                    hintStyle: TextStyle(
-                        color:
-                            Theme.of(context).colorScheme.onSurfaceVariant),
-                    prefixIcon: Icon(Icons.search,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurfaceVariant,
-                        size: 20),
-                    suffixIcon: _query.isNotEmpty
-                        ? IconButton(
-                            icon: Icon(Icons.clear,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                                size: 18),
-                            onPressed: () => _searchCtrl.clear(),
-                          )
-                        : null,
+                    hintStyle: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    prefixIcon: Icon(Icons.search, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 20),
+                    suffixIcon: _query.isNotEmpty ? IconButton(
+                      icon: Icon(Icons.clear, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 18),
+                      onPressed: () => _searchCtrl.clear(),
+                    ) : null,
                     filled: true,
-                    fillColor:
-                        Theme.of(context).colorScheme.surfaceContainerHighest,
+                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                     contentPadding: const EdgeInsets.symmetric(vertical: 8),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -225,38 +226,78 @@ class _ReceiptsScreenState extends State<ReceiptsScreen>
                   ),
                 ),
               ),
+              Expanded(child: _ReceiptListBody(
+                rows: _personalRows,
+                loading: _personalLoading,
+                error: _personalError,
+                noFamily: false,
+                query: _query,
+                familyMode: false,
+                onRetry: _loadPersonal,
+                onRefresh: refresh,
+              )),
             ],
           ),
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabCtrl,
-        children: [
-          _ReceiptListBody(
-            rows: _personalRows,
-            loading: _personalLoading,
-            error: _personalError,
-            noFamily: false,
-            query: _query,
-            familyMode: false,
-            onRetry: _loadPersonal,
-            onRefresh: refresh,
-          ),
-          _ReceiptListBody(
-            rows: _familyRows,
-            loading: _familyLoading,
-            error: _familyError,
-            noFamily: _familyNoFamily,
-            query: _query,
-            familyMode: true,
-            onRetry: _loadFamily,
-            onRefresh: refresh,
+          Stack(
+            fit: StackFit.expand,
+            children: [
+              _ReceiptListBody(
+                rows: _familyRows,
+                loading: _familyLoading,
+                error: _familyError,
+                noFamily: _familyNoFamily,
+                query: _query,
+                familyMode: true,
+                onRetry: _loadFamily,
+                onRefresh: refresh,
+              ),
+              if (_familyNoFamily)
+                Positioned.fill(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      FamilyBlurBackground(animation: _noFamilyAnim),
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('👨‍👩‍👧',
+                                  style: TextStyle(fontSize: 40)),
+                              const SizedBox(height: 16),
+                              Text(
+                                AppStrings.familySetupHint(
+                                    currentLanguage.value),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  height: 1.45,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  shadows: [
+                                    Shadow(
+                                        color: Colors.black, blurRadius: 8),
+                                    Shadow(
+                                        color: Colors.black, blurRadius: 16),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ),
         ],
       ),
       floatingActionButton: _canScanReceipt
           ? FloatingActionButton.extended(
               heroTag: 'fab_receipts_add_receipt',
+              backgroundColor: AppColors.primaryGreen(Theme.of(context).brightness),
               onPressed: () => showAddReceiptSheet(context, onDone: refresh),
               icon: const Icon(Icons.add, color: Colors.white),
               label: Text(
@@ -364,22 +405,6 @@ class _ReceiptListBody extends StatelessWidget {
               child: Text(AppStrings.get('retry', currentLanguage.value)),
             ),
           ],
-        ),
-      );
-    }
-    if (noFamily) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Text(
-            AppStrings.familySetupHint(currentLanguage.value),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 15,
-              height: 1.45,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
         ),
       );
     }

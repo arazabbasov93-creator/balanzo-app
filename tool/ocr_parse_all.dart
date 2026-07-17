@@ -23,7 +23,7 @@ void main() {
     stdout.writeln('=' * 70);
     stdout.writeln(f.path);
     stdout.writeln('store: ${r?.store} | items: ${r?.items.length ?? 0} (vat markers: $vatN)');
-    stdout.writeln('parsed total: ${r?.total?.toStringAsFixed(2)} | sum: ${sum.toStringAsFixed(2)} | footer: $footer');
+    stdout.writeln('parsed total: ${r?.total.toStringAsFixed(2)} | sum: ${sum.toStringAsFixed(2)} | footer: $footer');
     stdout.writeln('incomplete: ${r != null && ReceiptOcrPipeline.isParseLikelyIncomplete(r)}');
     if (r != null) {
       for (final i in r.items) {

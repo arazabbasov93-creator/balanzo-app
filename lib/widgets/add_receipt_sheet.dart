@@ -13,124 +13,125 @@ void showAddReceiptSheet(BuildContext context, {VoidCallback? onDone}) {
   final cs = Theme.of(context).colorScheme;
   showModalBottomSheet(
     context: context,
-    backgroundColor: cs.surfaceContainerHighest,
+    backgroundColor: Colors.transparent,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
     ),
-    builder: (ctx) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Theme.of(ctx).dividerColor,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              AppStrings.get('add_receipt', lang),
-              style: TextStyle(
-                color: Theme.of(ctx).colorScheme.onSurface,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ListTile(
-              tileColor: Colors.transparent,
-              leading: Icon(Icons.document_scanner_outlined,
-                  color: AppColors.primaryGreen(Theme.of(ctx).brightness)),
-              title: Text(
-                '📷  ${AppStrings.get('scan_receipt', lang)}',
-                style: TextStyle(
-                  color: Theme.of(ctx).colorScheme.onSurface,
-                  fontSize: 16,
+    builder: (ctx) => Material(
+      color: cs.surfaceContainerHighest,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+      clipBehavior: Clip.antiAlias,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).dividerColor,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              onTap: () {
-                Navigator.pop(ctx);
-                Navigator.of(context)
-                    .push(MaterialPageRoute(
-                        builder: (_) => const ReceiptCaptureScreen()))
-                    .then((_) => onDone?.call());
-              },
-            ),
-            ListTile(
-              tileColor: Colors.transparent,
-              leading: Icon(Icons.qr_code_scanner,
-                  color: AppColors.primaryGreen(Theme.of(ctx).brightness)),
-              title: Text(
-                '📱  ${AppStrings.get('scan_qr_code', lang)}',
+              const SizedBox(height: 16),
+              Text(
+                AppStrings.get('add_receipt', lang),
                 style: TextStyle(
                   color: Theme.of(ctx).colorScheme.onSurface,
-                  fontSize: 16,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              onTap: () {
-                Navigator.pop(ctx);
-                Navigator.of(context)
-                    .push(MaterialPageRoute(
-                        builder: (_) => const EkassaQrScreen()))
-                    .then((_) => onDone?.call());
-              },
-            ),
-            ListTile(
-              tileColor: Colors.transparent,
-              leading: Icon(Icons.numbers_outlined,
-                  color: AppColors.primaryGreen(Theme.of(ctx).brightness)),
-              title: Text(
-                '🔢  ${AppStrings.get('enter_fiscal_id', lang)}',
-                style: TextStyle(
-                  color: Theme.of(ctx).colorScheme.onSurface,
-                  fontSize: 16,
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Icon(Icons.document_scanner_outlined,
+                    color: AppColors.primaryGreen(Theme.of(ctx).brightness)),
+                title: Text(
+                  '📷  ${AppStrings.get('scan_receipt', lang)}',
+                  style: TextStyle(
+                    color: Theme.of(ctx).colorScheme.onSurface,
+                    fontSize: 16,
+                  ),
                 ),
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              onTap: () {
-                Navigator.pop(ctx);
-                Navigator.of(context)
-                    .push(MaterialPageRoute(
-                        builder: (_) => const FiscalIdScreen()))
-                    .then((_) => onDone?.call());
-              },
-            ),
-            ListTile(
-              tileColor: Colors.transparent,
-              leading: Icon(Icons.edit_note_outlined,
-                  color: AppColors.primaryGreen(Theme.of(ctx).brightness)),
-              title: Text(
-                '✏️  ${AppStrings.get('manual_entry', lang)}',
-                style: TextStyle(
-                  color: Theme.of(ctx).colorScheme.onSurface,
-                  fontSize: 16,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.of(context)
+                      .push(MaterialPageRoute(
+                          builder: (_) => const ReceiptCaptureScreen()))
+                      .then((_) => onDone?.call());
+                },
               ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+              ListTile(
+                leading: Icon(Icons.qr_code_scanner,
+                    color: AppColors.primaryGreen(Theme.of(ctx).brightness)),
+                title: Text(
+                  '📱  ${AppStrings.get('scan_qr_code', lang)}',
+                  style: TextStyle(
+                    color: Theme.of(ctx).colorScheme.onSurface,
+                    fontSize: 16,
+                  ),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.of(context)
+                      .push(MaterialPageRoute(
+                          builder: (_) => const EkassaQrScreen()))
+                      .then((_) => onDone?.call());
+                },
               ),
-              onTap: () {
-                Navigator.pop(ctx);
-                Navigator.of(context)
-                    .push(MaterialPageRoute(
-                        builder: (_) => const ManualEntryScreen()))
-                    .then((_) => onDone?.call());
-              },
-            ),
-            const SizedBox(height: 4),
-          ],
+              ListTile(
+                leading: Icon(Icons.numbers_outlined,
+                    color: AppColors.primaryGreen(Theme.of(ctx).brightness)),
+                title: Text(
+                  '🔢  ${AppStrings.get('enter_fiscal_id', lang)}',
+                  style: TextStyle(
+                    color: Theme.of(ctx).colorScheme.onSurface,
+                    fontSize: 16,
+                  ),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.of(context)
+                      .push(MaterialPageRoute(
+                          builder: (_) => const FiscalIdScreen()))
+                      .then((_) => onDone?.call());
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.edit_note_outlined,
+                    color: AppColors.primaryGreen(Theme.of(ctx).brightness)),
+                title: Text(
+                  '✏️  ${AppStrings.get('manual_entry', lang)}',
+                  style: TextStyle(
+                    color: Theme.of(ctx).colorScheme.onSurface,
+                    fontSize: 16,
+                  ),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.of(context)
+                      .push(MaterialPageRoute(
+                          builder: (_) => const ManualEntryScreen()))
+                      .then((_) => onDone?.call());
+                },
+              ),
+              const SizedBox(height: 4),
+            ],
+          ),
         ),
       ),
     ),

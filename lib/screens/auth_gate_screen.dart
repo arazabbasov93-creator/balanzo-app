@@ -5,6 +5,7 @@ import '../app_state.dart';
 import '../services/supabase_access.dart';
 import '../services/analytics_service.dart';
 import '../services/category_service.dart';
+import '../utils/postgrest_errors.dart';
 import 'login_screen.dart';
 import 'dashboard_screen.dart';
 import 'receipt_capture_screen.dart';
@@ -40,19 +41,37 @@ class _AuthGateScreenState extends State<AuthGateScreen> {
     setState(() {});
   }
 
-  void _wireAuthListeners() {
-    if (_listenersWired || !supabaseReady) return;
-    _listenersWired = true;
-    if (SupabaseAccess.clientOrNull?.auth.currentSession != null) {
-      CategoryService.refreshCache();
-    }
-    SupabaseAccess.client.auth.onAuthStateChange.listen((state) {
+  void _onAuthSessionChanged(AuthState state) {
+    try {
       if (state.session != null) {
         CategoryService.refreshCache();
       } else {
         CategoryService.clearCache();
       }
-    });
+    } catch (e, st) {
+      if (isIgnorablePostgrestAuthError(e)) {
+        logIgnorablePostgrestAuthError(e);
+        return;
+      }
+      debugPrint('[AuthGate] auth listener error: $e\n$st');
+    }
+  }
+
+  void _wireAuthListeners() {
+    if (_listenersWired || !supabaseReady) return;
+    _listenersWired = true;
+    if (SupabaseAccess.clientOrNull?.auth.currentSession != null) {
+      try {
+        CategoryService.refreshCache();
+      } catch (e, st) {
+        if (isIgnorablePostgrestAuthError(e)) {
+          logIgnorablePostgrestAuthError(e);
+        } else {
+          debugPrint('[AuthGate] initial refreshCache error: $e\n$st');
+        }
+      }
+    }
+    SupabaseAccess.client.auth.onAuthStateChange.listen(_onAuthSessionChanged);
   }
 
   Future<void> _retryConnect() async {
@@ -152,14 +171,22 @@ class FirstScanGateway extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              const Text(
+              Text(
                 'Try Scanning a Receipt',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
               ),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'Scan your first receipt to see how Balanzo works. No account needed to try.',
-                style: TextStyle(fontSize: 15, color: Colors.black54, height: 1.5),
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  height: 1.5,
+                ),
               ),
               const SizedBox(height: 40),
               ElevatedButton.icon(
@@ -199,9 +226,12 @@ class FirstScanGateway extends StatelessWidget {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text(
+                child: Text(
                   'Sign In / Create Account',
-                  style: TextStyle(fontSize: 16, color: Colors.black87),
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
                 ),
               ),
             ],

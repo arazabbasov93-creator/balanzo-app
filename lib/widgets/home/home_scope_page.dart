@@ -4,16 +4,20 @@ import '../../app_state.dart';
 import '../../l10n/app_strings.dart';
 import '../../models/budget.dart';
 import '../../models/family.dart';
+import '../../models/family_period_summary.dart';
 import '../../models/home_insights.dart';
 import '../../models/income.dart';
 import '../../services/auth_service.dart';
 import '../../services/budget_service.dart';
+import '../../services/family_preferences.dart';
 import '../../services/family_service.dart';
 import '../../services/home_data_cache.dart';
 import '../../services/income_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/receipt_service.dart';
+import '../../widgets/family_budget_header_card.dart';
 import '../../widgets/add_receipt_sheet.dart';
+import '../../widgets/family_blur_background.dart';
 import 'home_greeting_card.dart';
 import 'category_donut_chart.dart';
 import 'home_budget_section.dart';
@@ -21,6 +25,7 @@ import 'home_insight_sections.dart';
 import 'insight_stat_grid.dart';
 import 'last_week_spend_card.dart';
 import '../../config/app_colors.dart';
+import '../../utils/currency_data.dart';
 
 typedef HomeScopeData = ({
   HomeInsights? insights,
@@ -31,6 +36,7 @@ typedef HomeScopeData = ({
   double incomeTotal,
   List<MemberMonthSummary>? familyMembers,
   Family? family,
+  FamilyPeriodSummary? familyPeriodSummary,
 });
 
 typedef HomeHeaderSnapshot = ({
@@ -39,6 +45,7 @@ typedef HomeHeaderSnapshot = ({
   String? cachedName,
   bool periodSelectorEnabled,
   bool noFamily,
+  String? familyName,
 });
 
 class HomeScopePage extends StatefulWidget {
@@ -72,7 +79,7 @@ class HomeScopePage extends StatefulWidget {
 }
 
 class _HomeScopePageState extends State<HomeScopePage>
-    with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
   Future<HomeScopeData> _future = Future.value((
         insights: null as HomeInsights?,
         budgets: <Budget>[],
@@ -82,12 +89,15 @@ class _HomeScopePageState extends State<HomeScopePage>
         incomeTotal: 0.0,
         familyMembers: null as List<MemberMonthSummary>?,
         family: null as Family?,
+        familyPeriodSummary: null as FamilyPeriodSummary?,
       ));
   HomeScopeData? _cached;
   bool _itemsLoading = false;
   bool _startedLoad = false;
   bool _monthlySummaryChecked = false;
+  bool _sharePersonalBudget = false;
   HomeHeaderSnapshot? _lastHeaderPublished;
+  late AnimationController _blurAnim;
 
   @override
   bool get wantKeepAlive => true;
@@ -95,9 +105,21 @@ class _HomeScopePageState extends State<HomeScopePage>
   @override
   void initState() {
     super.initState();
+    _blurAnim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2500),
+      lowerBound: 0.0,
+      upperBound: 1.0,
+    );
     currentLanguage.addListener(_onLangChange);
     receiptsRevision.addListener(_onReceiptsChanged);
+    _loadSharePref();
     if (widget.isActive) _startLoad();
+  }
+
+  Future<void> _loadSharePref() async {
+    final share = await FamilyPreferences.sharePersonalBudgetWithFamily();
+    if (mounted) setState(() => _sharePersonalBudget = share);
   }
 
   @override
@@ -155,6 +177,7 @@ class _HomeScopePageState extends State<HomeScopePage>
           incomeTotal: 0.0,
           familyMembers: _cached?.familyMembers,
           family: _cached?.family,
+          familyPeriodSummary: _cached?.familyPeriodSummary,
         );
       });
       _publishHeader(_cached, instant);
@@ -199,6 +222,8 @@ class _HomeScopePageState extends State<HomeScopePage>
 
   @override
   void dispose() {
+    _blurAnim.stop();
+    _blurAnim.dispose();
     currentLanguage.removeListener(_onLangChange);
     receiptsRevision.removeListener(_onReceiptsChanged);
     super.dispose();
@@ -225,6 +250,7 @@ class _HomeScopePageState extends State<HomeScopePage>
         incomeTotal: 0.0,
         familyMembers: null as List<MemberMonthSummary>?,
         family: null as Family?,
+        familyPeriodSummary: null as FamilyPeriodSummary?,
       );
     }
 
@@ -241,6 +267,7 @@ class _HomeScopePageState extends State<HomeScopePage>
           incomeTotal: 0.0,
           familyMembers: null as List<MemberMonthSummary>?,
           family: null as Family?,
+          familyPeriodSummary: null as FamilyPeriodSummary?,
         );
       }
       widget.onFamilyStatusChanged?.call();
@@ -268,6 +295,7 @@ class _HomeScopePageState extends State<HomeScopePage>
           incomeTotal: _cached?.incomeTotal ?? 0.0,
           familyMembers: _cached?.familyMembers,
           family: _cached?.family,
+          familyPeriodSummary: _cached?.familyPeriodSummary,
         );
       });
       _publishHeader(_cached, insights);
@@ -311,6 +339,7 @@ class _HomeScopePageState extends State<HomeScopePage>
     double incomeTotal = 0;
     List<MemberMonthSummary>? familyMembers;
     Family? family;
+    FamilyPeriodSummary? familyPeriodSummary;
 
     if (familyMode) {
       family = await FamilyService.fetchMyFamily();
@@ -330,17 +359,16 @@ class _HomeScopePageState extends State<HomeScopePage>
               spend += (r['total_amount'] as num?)?.toDouble() ?? 0;
             }
           }
-          final income =
-              await IncomeService.totalForMonth(month, year, userId: m.userId);
           familyMembers.add(MemberMonthSummary(
             userId: m.userId,
             displayName: m.displayName,
-            income: income,
+            income: 0,
             spend: spend,
+            spendLimit: m.spendLimit,
           ));
           if (m.role == 'member' &&
-              income > 0 &&
-              spend > income &&
+              m.spendLimit != null &&
+              spend > m.spendLimit! &&
               family.createdBy == AuthService.currentUser?.id) {
             try {
               final prefs = await SharedPreferences.getInstance();
@@ -349,7 +377,7 @@ class _HomeScopePageState extends State<HomeScopePage>
               if (prefs.getBool(alertKey) != true) {
                 await NotificationService.sendFamilyBudgetAlert(
                   memberName: m.displayName,
-                  overspend: spend - income,
+                  overspend: spend - m.spendLimit!,
                 );
                 await prefs.setBool(alertKey, true);
               }
@@ -357,6 +385,16 @@ class _HomeScopePageState extends State<HomeScopePage>
               debugPrint('[HomeScope] family budget alert skipped: $e\n$st');
             }
           }
+        }
+        familyPeriodSummary = await FamilyService.fetchFamilyPeriodSummary(
+          familyId: family.id,
+          familyName: family.name,
+          month: month,
+          year: year,
+        );
+        if (await FamilyPreferences.sharePersonalBudgetWithFamily()) {
+          incomeEntries = await IncomeService.fetchForMonth(month, year);
+          incomeTotal = incomeEntries.fold<double>(0, (s, e) => s + e.amount);
         }
         try {
           budgets =
@@ -391,6 +429,7 @@ class _HomeScopePageState extends State<HomeScopePage>
       incomeTotal: incomeTotal,
       familyMembers: familyMembers,
       family: family,
+      familyPeriodSummary: familyPeriodSummary,
     );
   }
 
@@ -402,13 +441,15 @@ class _HomeScopePageState extends State<HomeScopePage>
       cachedName: insights?.fullName ?? cachedDisplayName.value,
       periodSelectorEnabled: pack?.noFamily != true,
       noFamily: pack?.noFamily == true,
+      familyName: widget.scopeIndex == 1 ? pack?.family?.name : null,
     );
     if (_lastHeaderPublished != null &&
         _lastHeaderPublished!.insights == snapshot.insights &&
         _lastHeaderPublished!.incomeTotal == snapshot.incomeTotal &&
         _lastHeaderPublished!.cachedName == snapshot.cachedName &&
         _lastHeaderPublished!.periodSelectorEnabled == snapshot.periodSelectorEnabled &&
-        _lastHeaderPublished!.noFamily == snapshot.noFamily) {
+        _lastHeaderPublished!.noFamily == snapshot.noFamily &&
+        _lastHeaderPublished!.familyName == snapshot.familyName) {
       return;
     }
     _lastHeaderPublished = snapshot;
@@ -426,150 +467,224 @@ class _HomeScopePageState extends State<HomeScopePage>
       future: _future,
       builder: (context, snapshot) {
         final pack = _cached;
-        final insights = pack?.insights;
-
-        if (pack?.noFamily == true) {
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-            children: [
-              _FamilySetupPrompt(lang: lang),
-            ],
-          );
+        final noFamily = pack?.noFamily == true;
+        if (noFamily && !_blurAnim.isAnimating) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _cached?.noFamily == true && !_blurAnim.isAnimating) {
+              _blurAnim.repeat(reverse: true);
+            }
+          });
         }
+        final insights = pack?.insights;
 
         final receiptsInPeriod = insights?.receiptsThisMonth ?? 0;
         final hasAnyReceipts = (insights?.totalReceiptsInScope ?? 0) > 0;
 
-        return RefreshIndicator(
-          onRefresh: () async {
-            _reload();
-            widget.onGlobalRefresh();
-          },
-          child: ListView(
-            padding: EdgeInsets.fromLTRB(16, widget.embedGreeting ? 20 : 12, 16, 100),
-            children: [
-              if (widget.embedGreeting)
-                ValueListenableBuilder<String?>(
-                  valueListenable: cachedDisplayName,
-                  builder: (_, cached, child) => HomeGreetingCard(
-                    identity: identity,
-                    insights: insights,
-                    incomeTotal: pack?.incomeTotal ?? 0,
-                    cachedName: cached ?? insights?.fullName,
-                    periodMonth: widget.periodMonth,
-                    periodYear: widget.periodYear,
-                    onPeriodChanged: widget.onPeriodChanged,
-                    periodSelectorEnabled: true,
-                  ),
-                ),
-              if (widget.embedGreeting) const SizedBox(height: 12),
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            RefreshIndicator(
+              onRefresh: () async {
+                _reload();
+                widget.onGlobalRefresh();
+              },
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(16, widget.embedGreeting ? 20 : 12, 16, 100),
+                children: [
+                  if (widget.embedGreeting)
+                    ValueListenableBuilder<String?>(
+                      valueListenable: cachedDisplayName,
+                      builder: (_, cached, child) => HomeGreetingCard(
+                        identity: identity,
+                        insights: insights,
+                        incomeTotal: pack?.incomeTotal ?? 0,
+                        cachedName: cached ?? insights?.fullName,
+                        familyName: widget.scopeIndex == 1 ? pack?.family?.name : null,
+                        periodMonth: widget.periodMonth,
+                        periodYear: widget.periodYear,
+                        onPeriodChanged: widget.onPeriodChanged,
+                        periodSelectorEnabled: true,
+                        hidePersonalFinance: widget.scopeIndex == 1,
+                      ),
+                    ),
+                  if (widget.embedGreeting) const SizedBox(height: 12),
 
-              if (hasAnyReceipts && receiptsInPeriod == 0)
-                _NoPeriodSpendBanner(
-                  month: widget.periodMonth,
-                  year: widget.periodYear,
-                  lang: lang,
-                ),
-              if (hasAnyReceipts && receiptsInPeriod == 0)
-                const SizedBox(height: 12),
+                  if (widget.scopeIndex == 1 &&
+                      pack?.familyPeriodSummary != null &&
+                      !noFamily) ...[
+                    FamilyBudgetHeaderCard(
+                      summary: pack!.familyPeriodSummary!,
+                      onPeriodChanged: widget.onPeriodChanged,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
 
-              if (pack != null)
-                HomeBudgetSection(
-                  insights: insights,
-                  budgets: pack.budgets,
-                  incomeEntries: pack.incomeEntries,
-                  incomeTotal: pack.incomeTotal,
-                  familyMembers: pack.familyMembers,
-                  onEditIncome: () async {
-                    await showIncomeEditorSheet(
-                      context,
+                  if (hasAnyReceipts && receiptsInPeriod == 0 && widget.scopeIndex == 0)
+                    _NoPeriodSpendBanner(
                       month: widget.periodMonth,
                       year: widget.periodYear,
-                      initial: pack.incomeEntries,
-                      onSaved: _reload,
-                    );
-                    _reload();
-                  },
-                ),
-              if (pack != null) const SizedBox(height: 16),
+                      lang: lang,
+                    ),
+                  if (hasAnyReceipts && receiptsInPeriod == 0 && widget.scopeIndex == 0)
+                    const SizedBox(height: 12),
 
-              if (insights != null && hasAnyReceipts) ...[
-                LastWeekSpendCard(insights: insights),
-                if (_itemsLoading) ...[
-                  const SizedBox(height: 12),
-                  const LinearProgressIndicator(minHeight: 2),
-                ],
-                const SizedBox(height: 16),
-                if (insights.hasPeriodSpend) ...[
-                  if (insights.inflationPct != null)
-                    _InflationPill(inflationPct: insights.inflationPct!),
-                  if (insights.inflationPct != null) const SizedBox(height: 12),
-                  TopCategoryInsight(insights: insights),
-                  const SizedBox(height: 12),
-                  InsightStatGrid(insights: insights),
-                  const SizedBox(height: 14),
-                  _SectionHeader(
-                    title: AppStrings.get('categories', lang),
-                    subtitle: AppStrings.spentInMonth(
-                      insights.periodMonth,
-                      insights.periodYear,
-                      lang,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  CategoryDonutChart(insights: insights),
-                  const SizedBox(height: 8),
-                  CategorySpendList(
-                    breakdown: insights.categoryBreakdown,
-                    insights: insights,
-                  ),
-                  if (insights.topStores.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    _SectionHeader(title: AppStrings.get('dash_top_stores', lang)),
-                    const SizedBox(height: 4),
-                    TopStoresSection(
-                      stores: insights.topStores,
-                      allStores: insights.allStores,
-                      periodCurrency: insights.periodCurrency,
-                    ),
-                  ],
-                  if (insights.topProductsByQuantity.isNotEmpty ||
-                      insights.topProductsByValue.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    _SectionHeader(title: AppStrings.get('dash_most_bought', lang)),
-                    const SizedBox(height: 6),
-                    MostBoughtInsights(
-                      byQuantity: insights.topProductsByQuantity,
-                      byValue: insights.topProductsByValue,
+                  if (pack != null && !noFamily && widget.scopeIndex == 0)
+                    HomeBudgetSection(
                       insights: insights,
+                      budgets: pack.budgets,
+                      incomeEntries: pack.incomeEntries,
+                      incomeTotal: pack.incomeTotal,
+                      familyMembers: null,
+                      onEditIncome: () async {
+                        await showIncomeEditorSheet(
+                          context,
+                          month: widget.periodMonth,
+                          year: widget.periodYear,
+                          initial: pack.incomeEntries,
+                          onSaved: _reload,
+                        );
+                        _reload();
+                      },
+                    ),
+                  if (pack != null &&
+                      !noFamily &&
+                      widget.scopeIndex == 1 &&
+                      _sharePersonalBudget) ...[
+                    HomeBudgetSection(
+                      insights: insights,
+                      budgets: const [],
+                      incomeEntries: pack.incomeEntries,
+                      incomeTotal: pack.incomeTotal,
+                      familyMembers: null,
+                      onEditIncome: () async {
+                        await showIncomeEditorSheet(
+                          context,
+                          month: widget.periodMonth,
+                          year: widget.periodYear,
+                          initial: pack.incomeEntries,
+                          onSaved: _reload,
+                        );
+                        _reload();
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (pack != null && !noFamily && widget.scopeIndex == 0)
+                    const SizedBox(height: 16),
+
+                  if (widget.scopeIndex == 1 &&
+                      pack != null &&
+                      !noFamily &&
+                      pack.familyMembers != null &&
+                      pack.familyMembers!.isNotEmpty) ...[
+                    _SectionHeader(title: AppStrings.get('family_members', lang)),
+                    const SizedBox(height: 8),
+                    ...pack.familyMembers!.map(
+                      (m) => _FamilyMemberRow(
+                        member: m,
+                        currency: insights?.periodCurrency,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  if (insights != null &&
+                      hasAnyReceipts &&
+                      !noFamily &&
+                      widget.scopeIndex == 0) ...[
+                    LastWeekSpendCard(insights: insights),
+                    if (_itemsLoading) ...[
+                      const SizedBox(height: 12),
+                      const LinearProgressIndicator(minHeight: 2),
+                    ],
+                    const SizedBox(height: 16),
+                    if (insights.hasPeriodSpend) ...[
+                      if (insights.inflationPct != null)
+                        _InflationPill(inflationPct: insights.inflationPct!),
+                      if (insights.inflationPct != null) const SizedBox(height: 12),
+                      TopCategoryInsight(insights: insights),
+                      const SizedBox(height: 12),
+                      InsightStatGrid(insights: insights),
+                      const SizedBox(height: 14),
+                      _SectionHeader(
+                        title: AppStrings.get('categories', lang),
+                        subtitle: AppStrings.spentInMonth(
+                          insights.periodMonth,
+                          insights.periodYear,
+                          lang,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      CategoryDonutChart(insights: insights),
+                      const SizedBox(height: 8),
+                      CategorySpendList(
+                        breakdown: insights.categoryBreakdown,
+                        insights: insights,
+                      ),
+                      if (insights.topStores.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        _SectionHeader(title: AppStrings.get('dash_top_stores', lang)),
+                        const SizedBox(height: 4),
+                        TopStoresSection(
+                          stores: insights.topStores,
+                          allStores: insights.allStores,
+                          periodCurrency: insights.periodCurrency,
+                        ),
+                      ],
+                      if (insights.topProductsByQuantity.isNotEmpty ||
+                          insights.topProductsByValue.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        _SectionHeader(title: AppStrings.get('dash_most_bought', lang)),
+                        const SizedBox(height: 6),
+                        MostBoughtInsights(
+                          byQuantity: insights.topProductsByQuantity,
+                          byValue: insights.topProductsByValue,
+                          insights: insights,
+                        ),
+                      ],
+                    ],
+                    if (pack!.budgetAlerts.isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      _SectionHeader(title: AppStrings.get('budget_alerts', lang)),
+                      const SizedBox(height: 8),
+                      ...pack.budgetAlerts.map((b) => _BudgetAlertCard(budget: b)),
+                    ],
+                  ] else if (!hasAnyReceipts && !noFamily)
+                    _EmptyHomePrompt(
+                      familyMode: widget.scopeIndex == 1,
+                      showAddButton: widget.scopeIndex == 0,
+                      onScan: () => showAddReceiptSheet(context, onDone: () {
+                        _reload();
+                        widget.onGlobalRefresh();
+                      }),
+                    )
+                  else if (snapshot.connectionState == ConnectionState.waiting &&
+                      pack == null)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(40),
+                        child: CircularProgressIndicator(),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (noFamily)
+              Positioned.fill(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    FamilyBlurBackground(animation: _blurAnim),
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: _FamilySetupPrompt(lang: lang),
+                      ),
                     ),
                   ],
-                ],
-                if (pack!.budgetAlerts.isNotEmpty) ...[
-                  const SizedBox(height: 20),
-                  _SectionHeader(title: AppStrings.get('budget_alerts', lang)),
-                  const SizedBox(height: 8),
-                  ...pack.budgetAlerts.map((b) => _BudgetAlertCard(budget: b)),
-                ],
-              ] else if (!hasAnyReceipts && pack?.noFamily != true)
-                _EmptyHomePrompt(
-                  familyMode: widget.scopeIndex == 1,
-                  showAddButton: widget.scopeIndex == 0,
-                  onScan: () => showAddReceiptSheet(context, onDone: () {
-                    _reload();
-                    widget.onGlobalRefresh();
-                  }),
-                )
-              else if (snapshot.connectionState == ConnectionState.waiting &&
-                  pack == null)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(40),
-                    child: CircularProgressIndicator(),
-                  ),
                 ),
-            ],
-          ),
+              ),
+          ],
         );
       },
     );
@@ -579,24 +694,80 @@ class _HomeScopePageState extends State<HomeScopePage>
 class _FamilySetupPrompt extends StatelessWidget {
   final String lang;
   const _FamilySetupPrompt({required this.lang});
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('👨‍👩‍👧', style: TextStyle(fontSize: 40)),
+        const SizedBox(height: 16),
+        Text(
+          AppStrings.familySetupHint(lang),
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 15,
+            height: 1.45,
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+            shadows: const [
+              Shadow(color: Colors.black, blurRadius: 8),
+              Shadow(color: Colors.black, blurRadius: 16),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FamilyMemberRow extends StatelessWidget {
+  final MemberMonthSummary member;
+  final String? currency;
+
+  const _FamilyMemberRow({required this.member, this.currency});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Theme.of(context).dividerColor),
       ),
-      child: Text(
-        AppStrings.familySetupHint(lang),
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: 15,
-          height: 1.45,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              member.displayName,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${AppStrings.get('family_member_spend', currentLanguage.value)}: ${formatMoney(member.spend, currency)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              if (member.spendLimit != null)
+                Text(
+                  '${AppStrings.get('family_member_limit', currentLanguage.value)}: ${formatMoney(member.spendLimit!, currency)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }

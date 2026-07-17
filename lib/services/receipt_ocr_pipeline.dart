@@ -40,14 +40,20 @@ class ReceiptOcrPipeline {
   /// True when OCR output looks like a government e-kassa receipt.
   static bool isEkassaOcrText(String text) {
     final lower = text.toLowerCase();
-    return text.contains('ITEM:') &&
-        (lower.contains('fiskal id') ||
-            lower.contains('fiscal id') ||
-            lower.contains('fiskal i̇d') ||
-            lower.contains('object name') ||
-            lower.contains('obyektin adı') ||
-            lower.contains('say qiym') ||
-            lower.contains('quantity price total'));
+    if (text.contains('ITEM:')) {
+      return lower.contains('fiskal id') ||
+          lower.contains('fiscal id') ||
+          lower.contains('fiskal i̇d') ||
+          lower.contains('object name') ||
+          lower.contains('obyektin adı') ||
+          lower.contains('say qiym') ||
+          lower.contains('quantity price total');
+    }
+    return lower.contains('say qiym') ||
+        lower.contains('quantity price total') ||
+        lower.contains('obyektin adı') ||
+        lower.contains('object name') ||
+        (lower.contains('fiskal id') || lower.contains('fiscal id'));
   }
 
   static Receipt? _tryStructuredParse(String ocrText) {
@@ -57,14 +63,11 @@ class ReceiptOcrPipeline {
       parsed = StructuredReceiptParser.tryParseHeaderOnly(ocrText)
           ?.withCorrectedTotals();
     }
-    if (parsed == null || parsed.items.isEmpty) return null;
+    if (parsed == null) return null;
+    if (parsed.items.isEmpty && parsed.total <= 0) return null;
     return parsed;
   }
 
-  /// Parse structured OCR text into a [Receipt].
-  ///
-  /// [documentId] — known fiscal ID (QR/API fetch). When omitted, extracted from OCR.
-  /// [isGovernmentVerified] — true only when receipt JPEG came from e-kassa API.
   static Future<Receipt> parseOcrText(
     String ocrText, {
     String? documentId,
@@ -76,17 +79,23 @@ class ReceiptOcrPipeline {
     }
 
     Receipt? parsed;
+    final ekassaShaped = isEkassaOcrText(ocrText) || isGovernmentVerified;
 
-    // PIPELINE: AI is primary (global, handles any language/format).
-    // StructuredReceiptParser is fallback (AZ e-kassa format, zero cost).
-    // Do not reverse this order.
-    if (ReceiptParserService.isAvailable) {
+    // E-kassa / structured text: try zero-cost parse first.
+    if (ekassaShaped) {
+      parsed = _tryStructuredParse(ocrText);
+    }
+
+    // AI fallback when structured parse missing or incomplete.
+    if ((parsed == null || parsed.items.isEmpty) &&
+        ReceiptParserService.isAvailable) {
       try {
-        parsed = (await ReceiptParserService.parse(ocrText)).withCorrectedTotals();
-        if (parsed.items.isEmpty) parsed = null;
+        parsed =
+            (await ReceiptParserService.parse(ocrText)).withCorrectedTotals();
+        if (parsed.items.isEmpty && parsed.total <= 0) parsed = null;
       } catch (e, st) {
         debugPrint('[AI Parse] Failed: $e\n$st');
-        parsed = null;
+        parsed ??= _tryStructuredParse(ocrText);
       }
     }
 
@@ -114,6 +123,7 @@ class ReceiptOcrPipeline {
       items: parsed.items,
       subtotal: parsed.subtotal,
       serviceCharge: parsed.serviceCharge,
+      discountTotal: parsed.discountTotal,
       vat: parsed.vat,
       total: parsed.total,
       currency: parsed.currency,
@@ -162,7 +172,6 @@ class ReceiptOcrPipeline {
     }
   }
 
-  /// Logs when item sum is below receipt total; does not block save sheet.
   static bool isParseLikelyIncomplete(Receipt receipt) {
     if (receipt.items.isEmpty) return receipt.total > 0;
     final sum = _itemsSum(receipt);
@@ -176,14 +185,21 @@ class ReceiptOcrPipeline {
       receipt.items.fold(0.0, (s, i) => s + i.totalPrice);
 
   /// Run on-device OCR on one or more images, then parse with the shared pipeline.
-  /// iOS uses Apple Vision; Android uses ML Kit.
   static Future<Receipt> parseImages(
     List<String> imagePaths, {
     String? documentId,
     bool isGovernmentVerified = false,
     bool requireItems = false,
   }) async {
-    final ocrText = await OcrService.recognizeMultipleRaw(imagePaths);
+    // Prefer structured e-kassa preprocessing when applicable.
+    final rawSections = await Future.wait(
+      imagePaths.map(OcrService.recognizeText),
+    );
+    final stitched = rawSections.join('\n---\n');
+    final ocrText = isEkassaOcrText(stitched) || isGovernmentVerified
+        ? await OcrService.recognizeMultiple(imagePaths)
+        : await OcrService.recognizeMultipleRaw(imagePaths);
+
     return parseOcrText(
       ocrText,
       documentId: documentId,

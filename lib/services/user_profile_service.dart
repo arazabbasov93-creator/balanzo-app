@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../app_state.dart';
 import 'auth_service.dart';
 import 'supabase_access.dart';
+import '../utils/postgrest_errors.dart';
 
 /// Keeps display name warm so Home greeting never flashes "User".
 class UserProfileService {
@@ -42,7 +43,11 @@ class UserProfileService {
           return name;
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      if (isIgnorablePostgrestAuthError(e)) {
+        logIgnorablePostgrestAuthError(e);
+      }
+    }
     final fallback = _nameFromAuth();
     if (fallback != null && refreshCache) cachedDisplayName.value = fallback;
     return fallback;

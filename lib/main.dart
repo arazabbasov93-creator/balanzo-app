@@ -8,11 +8,65 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'config/app_colors.dart';
 import 'app_state.dart';
 import 'diag_log.dart';
 import 'screens/age_gate_screen.dart';
 import 'screens/auth_gate_screen.dart';
 import 'services/user_profile_service.dart';
+import 'services/family_invite_link_service.dart';
+import 'utils/postgrest_errors.dart';
+
+bool _handleGlobalError(Object error, StackTrace stack) {
+  if (isIgnorablePostgrestAuthError(error)) {
+    logIgnorablePostgrestAuthError(error);
+    return true;
+  }
+  return false;
+}
+
+void _installGlobalErrorHandlers() {
+  final previousFlutterOnError = FlutterError.onError;
+  FlutterError.onError = (details) {
+    if (_handleGlobalError(
+      details.exception,
+      details.stack ?? StackTrace.empty,
+    )) {
+      return;
+    }
+    if (previousFlutterOnError != null) {
+      previousFlutterOnError(details);
+    } else {
+      FlutterError.presentError(details);
+    }
+  };
+
+  final previousPlatformOnError = PlatformDispatcher.instance.onError;
+  PlatformDispatcher.instance.onError = (error, stack) {
+    if (_handleGlobalError(error, stack)) return true;
+    if (previousPlatformOnError != null) {
+      return previousPlatformOnError(error, stack);
+    }
+    return false;
+  };
+}
+
+void _installCrashlyticsErrorHandlers() {
+  FlutterError.onError = (details) {
+    if (_handleGlobalError(
+      details.exception,
+      details.stack ?? StackTrace.empty,
+    )) {
+      return;
+    }
+    FirebaseCrashlytics.instance.recordFlutterError(details, fatal: false);
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    if (_handleGlobalError(error, stack)) return true;
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: false);
+    return true;
+  };
+}
 
 Future<void> _initializeServices() async {
   _initFirebaseInBackground();
@@ -53,13 +107,7 @@ void _initFirebaseInBackground() {
     try {
       debugPrint('[INIT] Firebase.initializeApp() starting...');
       await Firebase.initializeApp().timeout(const Duration(seconds: 15));
-      FlutterError.onError = (details) {
-        FirebaseCrashlytics.instance.recordFlutterError(details, fatal: false);
-      };
-      PlatformDispatcher.instance.onError = (error, stack) {
-        FirebaseCrashlytics.instance.recordError(error, stack, fatal: false);
-        return true;
-      };
+      _installCrashlyticsErrorHandlers();
       debugPrint('[INIT] Firebase.initializeApp() OK');
     } catch (e, st) {
       debugPrint('[INIT] Firebase.initializeApp() FAILED: $e\n$st');
@@ -70,6 +118,7 @@ void _initFirebaseInBackground() {
 void main() {
   diag('main() enter');
   WidgetsFlutterBinding.ensureInitialized();
+  _installGlobalErrorHandlers();
   diag('main() runApp');
   runApp(const BalanzoApp());
 }
@@ -149,6 +198,7 @@ class _BalanzoAppState extends State<BalanzoApp> {
   @override
   void initState() {
     super.initState();
+    FamilyInviteLinkService.init();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       debugPrint('[INIT] postFrame — starting background services');
       unawaited(_initializeServices());
@@ -171,6 +221,24 @@ class _BalanzoAppState extends State<BalanzoApp> {
         dividerColor: const Color(0xFF2C2C34),
         useMaterial3: true,
         navigationBarTheme: _navLabelStyle,
+        textTheme: const TextTheme(
+          bodyLarge: TextStyle(color: Color(0xFFF2F2F5)),
+          bodyMedium: TextStyle(color: Color(0xFFF2F2F5)),
+          bodySmall: TextStyle(color: Color(0xFFB8B8C8)),
+          labelLarge: TextStyle(color: Color(0xFFF2F2F5)),
+          labelMedium: TextStyle(color: Color(0xFFB8B8C8)),
+          labelSmall: TextStyle(color: Color(0xFF8888A0), letterSpacing: 1.2),
+          titleLarge: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          titleMedium: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          titleSmall: TextStyle(color: Color(0xFFF2F2F5), fontWeight: FontWeight.w500),
+          headlineMedium: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          headlineSmall: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        inputDecorationTheme: const InputDecorationTheme(
+          labelStyle: TextStyle(color: Color(0xFFB8B8C8)),
+          hintStyle: TextStyle(color: Color(0xFF8888A0)),
+          floatingLabelStyle: TextStyle(color: Color(0xFFF2F2F5)),
+        ),
       );
 
   ThemeData get _lightTheme => ThemeData(
@@ -190,7 +258,7 @@ class _BalanzoAppState extends State<BalanzoApp> {
         useMaterial3: true,
         navigationBarTheme: _navLabelStyle,
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF1B5E20),
+          backgroundColor: AppColors.primaryGreenLight,
           foregroundColor: Colors.white,
           elevation: 0,
         ),
@@ -221,6 +289,7 @@ class _BalanzoAppState extends State<BalanzoApp> {
       builder: (context, lang, _) => ValueListenableBuilder<ThemeMode>(
         valueListenable: currentThemeMode,
         builder: (context, themeMode, _) => MaterialApp(
+          navigatorKey: rootNavigatorKey,
           title: 'Balanzo',
           debugShowCheckedModeBanner: false,
           locale: Locale(lang),

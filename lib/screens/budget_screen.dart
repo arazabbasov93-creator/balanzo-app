@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import '../app_state.dart';
+import '../l10n/app_strings.dart';
 import '../models/budget.dart';
 import '../models/category.dart';
 import '../services/budget_service.dart';
 import '../services/category_service.dart';
+import '../services/family_preferences.dart';
+import '../utils/category_display.dart';
 import '../config/app_colors.dart';
 
 class BudgetScreen extends StatefulWidget {
@@ -15,11 +19,18 @@ class BudgetScreen extends StatefulWidget {
 class _BudgetScreenState extends State<BudgetScreen> {
   final now = DateTime.now();
   late Future<_BudgetPageData> _future;
+  bool _sharePersonalBudget = false;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+    _loadSharePref();
+  }
+
+  Future<void> _loadSharePref() async {
+    final share = await FamilyPreferences.sharePersonalBudgetWithFamily();
+    if (mounted) setState(() => _sharePersonalBudget = share);
   }
 
   Future<_BudgetPageData> _load() async {
@@ -39,6 +50,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
   void _refresh() => setState(() => _future = _load());
 
   Future<void> _addBudget(List<Category> categories) async {
+    final lang = currentLanguage.value;
     Category? selected;
     final amountCtrl = TextEditingController();
 
@@ -56,7 +68,12 @@ class _BudgetScreenState extends State<BudgetScreen> {
                   border: OutlineInputBorder(),
                 ),
                 items: categories
-                    .map((c) => DropdownMenuItem(value: c, child: Text(c.name)))
+                    .map(
+                      (c) => DropdownMenuItem(
+                        value: c,
+                        child: Text(displayCategoryName(c, lang)),
+                      ),
+                    )
                     .toList(),
                 onChanged: (c) => setS(() => selected = c),
               ),
@@ -135,6 +152,27 @@ class _BudgetScreenState extends State<BudgetScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 _MonthHeader(month: now.month, year: now.year),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    AppStrings.get('share_personal_budget_with_family',
+                        currentLanguage.value),
+                  ),
+                  subtitle: Text(
+                    AppStrings.get('share_personal_budget_hint',
+                        currentLanguage.value),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  value: _sharePersonalBudget,
+                  onChanged: (v) async {
+                    await FamilyPreferences.setSharePersonalBudgetWithFamily(v);
+                    if (mounted) setState(() => _sharePersonalBudget = v);
+                  },
+                ),
                 const SizedBox(height: 16),
                 if (data.budgets.isEmpty)
                   _EmptyBudgetHint(
@@ -248,6 +286,7 @@ class _BudgetCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lang = currentLanguage.value;
     final pct = (budget.usedFraction * 100).toInt();
     final color = budget.isOverBudget
         ? Colors.red
@@ -271,7 +310,7 @@ class _BudgetCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    budget.categoryName ?? 'General',
+                    displayCategoryNameRaw(budget.categoryName, lang),
                     style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                   ),
                 ),

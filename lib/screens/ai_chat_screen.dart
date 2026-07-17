@@ -9,8 +9,12 @@ import '../l10n/app_strings.dart';
 import '../services/analytics_service.dart';
 import '../services/receipt_parser_service.dart';
 import '../services/subscription_service.dart';
+import '../services/budget_service.dart';
+import '../services/income_service.dart';
+import '../services/family_service.dart';
 import 'upgrade_screen.dart';
 import '../config/app_colors.dart';
+import '../widgets/balanzo_header_styles.dart';
 
 class AiChatScreen extends StatefulWidget {
   final VoidCallback? onBack;
@@ -129,23 +133,132 @@ class _AiChatScreenState extends State<AiChatScreen> {
     );
   }
 
+  String _formatAzn(double amount) => '${amount.toStringAsFixed(2)} AZN';
+
   Future<String> _buildContext(int dataWindowDays) async {
     try {
       final supabase = SupabaseAccess.client;
       final userId = supabase.auth.currentUser?.id;
       if (userId == null) return '';
+
+      final now = DateTime.now();
+      final month = now.month;
+      final year = now.year;
+      final buffer = StringBuffer();
+
+      final income = await IncomeService.totalForMonth(month, year);
+      final budgets = await BudgetService.fetchForMonth(month, year);
+      final spentMap = await BudgetService.spentByCategory(month, year);
+      final personalSpent =
+          spentMap.values.fold<double>(0, (sum, value) => sum + value);
+      final budgetTotal =
+          budgets.fold<double>(0, (sum, budget) => sum + budget.amount);
+
+      final incomeStr = income > 0 ? _formatAzn(income) : 'not set';
+      final String remainingStr;
+      if (income > 0) {
+        remainingStr = _formatAzn(income - personalSpent);
+      } else if (budgetTotal > 0) {
+        remainingStr = _formatAzn(budgetTotal - personalSpent);
+      } else {
+        remainingStr = 'not set';
+      }
+
+      buffer.writeln(
+        'Personal budget: $incomeStr, spent: ${_formatAzn(personalSpent)}, remaining: $remainingStr',
+      );
+
+      // Privacy: family section uses aggregate totals only (budget + combined spend).
+      // FamilyService.fetchFamilyPeriodSummary sums receipt totals server-side;
+      // no per-member receipt rows are included in the AI context.
+      final family = await FamilyService.fetchMyFamily();
+      if (family != null) {
+        final summary = await FamilyService.fetchFamilyPeriodSummary(
+          familyId: family.id,
+          familyName: family.name,
+          month: month,
+          year: year,
+        );
+        final familyBudgetStr = summary.hasBudget
+            ? _formatAzn(summary.availableBudget)
+            : 'not set';
+        final familyRemainingStr = summary.hasBudget
+            ? _formatAzn(summary.remaining)
+            : 'not set';
+        buffer.writeln(
+          'Family budget (combined): $familyBudgetStr, spent: ${_formatAzn(summary.spent)}, remaining: $familyRemainingStr',
+        );
+      }
+
       final since = DateTime.now().subtract(Duration(days: dataWindowDays));
       final data = await supabase
           .from('receipts')
-          .select('store_name, purchase_date, total_amount, vat_amount, receipt_items(name_raw, unit_price, quantity)')
+          .select(
+            'store_name, purchase_date, total_amount, '
+            'receipt_items(name_raw, unit_price, quantity)',
+          )
           .eq('user_id', userId)
           .gte('purchase_date', since.toIso8601String())
           .order('purchase_date', ascending: false)
           .limit(30);
-      return 'Recent $dataWindowDays-day receipts (up to 30): ${jsonEncode(data)}';
+      buffer.write('Recent receipts: ${jsonEncode(data)}');
+
+      return buffer.toString();
     } catch (_) {
       return '';
     }
+  }
+
+  String _buildStaticSystemPrompt() {
+    final lang = currentLanguage.value.toUpperCase();
+    return '''You are Balanzo, the user's personal finance assistant inside the Balanzo app.
+
+You only discuss:
+- The user's personal spending, budgets, and income
+- Receipt items, prices, and categories
+- Household expenses and inflation trends
+- Restock and shopping patterns
+- Family combined spending and budget (aggregate totals only — you are never given, and must never assume, another family member's individual purchases or spend)
+
+You do not discuss VAT, ƏDV, tax refunds, or government cashback programs in any form, even if asked directly. If asked, give a brief one-line redirect back to general spending help. Do not name VAT/ƏDV as a current, planned, or future feature.
+
+If asked about anything unrelated to personal finance or spending, respond in the current language with a short variant of: "I can only help with questions about your spending and household finances. Try asking about your budget, recent purchases, or price trends."
+
+Behavior rules:
+- Never respond with a list of "things I can help with" or a menu of options. Answer the actual question directly and substantively.
+- Default analysis period is the current calendar month unless the user names a different period. When no period is specified, give a detailed breakdown: total spend, top categories, notable individual purchases, and comparison against budget/income if available.
+- If the user names a specific period (last month, this year, a named month), analyze exactly that period using the data provided.
+- Use the conversation history to maintain context. Do not ask the user to repeat information already given earlier in this conversation.
+- Never invent words. Never use rare, non-standard, or compound vocabulary you are not certain is correct in the response language. Prefer simple, standard, dictionary-correct words.
+- Respond in the same language as the app interface: $lang. AZ = Azerbaijani, RU = Russian, EN = English.
+- Use AZN (manat) as the currency.
+- Be concise but substantive — lead with specific numbers from the data provided, not generic advice.
+- If family aggregate data is included below, you may reference combined family totals. Do not speculate about any individual family member's spending beyond the user's own data.''';
+  }
+
+  List<Map<String, String>> _conversationHistoryForApi(String currentText) {
+    final history = <Map<String, String>>[];
+    var skipLeadingAssistant = true;
+
+    for (var i = 0; i < _messages.length; i++) {
+      final message = _messages[i];
+      if (skipLeadingAssistant && !message.isUser) continue;
+      if (message.isUser) skipLeadingAssistant = false;
+      if (i == _messages.length - 1 &&
+          message.isUser &&
+          message.text == currentText) {
+        continue;
+      }
+      history.add({
+        'role': message.isUser ? 'user' : 'assistant',
+        'content': message.text,
+      });
+    }
+
+    if (history.length > 10) {
+      history.removeRange(0, history.length - 10);
+    }
+    return history;
   }
 
   Future<void> _incrementAiUsage() async {
@@ -172,9 +285,56 @@ class _AiChatScreenState extends State<AiChatScreen> {
     return (_access!.questionsLimit - _access!.questionsUsed).clamp(0, _access!.questionsLimit);
   }
 
-  Widget _buildUpgradeBanner() {
+  Widget _buildUsageBanner() {
     final lang = currentLanguage.value;
     final access = _access!;
+    final brightness = Theme.of(context).brightness;
+
+    if (_isPremium && access.premiumUnlimited) {
+      return const SizedBox.shrink();
+    }
+
+    if (_isPremium && !access.premiumUnlimited) {
+      final limitReached = !access.allowed;
+      final message = limitReached
+          ? AppStrings.aiPremiumLimitReached(access.monthResetsOn, lang)
+          : AppStrings.aiPremiumMessagesLeft(access.premiumMessagesLeft, lang);
+
+      return Container(
+        margin: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: limitReached
+              ? AppColors.primaryGreen(brightness)
+              : Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            children: [
+              Icon(
+                limitReached ? Icons.lock_outline : Icons.info_outline,
+                size: 16,
+                color: limitReached ? Colors.white70 : Colors.amber.shade700,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  message,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: limitReached
+                        ? Colors.white
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final limitReached = _freeQuestionsLeft == 0;
     final message = limitReached
         ? AppStrings.aiUpgradeLimitReached(lang)
@@ -184,7 +344,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
             lang,
           );
 
-    final brightness = Theme.of(context).brightness;
     return Container(
       margin: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -239,9 +398,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
   void _showUpgradeSheet() {
     if (!mounted) return;
+    final scheme = Theme.of(context).colorScheme;
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: scheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
@@ -250,15 +410,19 @@ class _AiChatScreenState extends State<AiChatScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Free tier includes 1 message per week',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
+            Text(
+              AppStrings.get('ai_free_limit_title', currentLanguage.value),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: scheme.onSurface,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
-            const Text(
-              'Upgrade to Premium for unlimited messages, 90 days of spending history, and full AI insights.',
-              style: TextStyle(fontSize: 14, color: Colors.black54),
+            Text(
+              AppStrings.get('ai_free_limit_body', currentLanguage.value),
+              style: TextStyle(fontSize: 14, color: scheme.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -274,18 +438,76 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   Navigator.pop(context);
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => const UpgradeScreen()));
                 },
-                child: const Text('Upgrade to Premium', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                child: Text(
+                  AppStrings.get('upgrade_to_premium', currentLanguage.value),
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
               ),
             ),
             const SizedBox(height: 12),
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Maybe later', style: TextStyle(color: Colors.black54)),
+              child: Text(
+                AppStrings.get('ai_maybe_later', currentLanguage.value),
+                style: TextStyle(color: scheme.onSurfaceVariant),
+              ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  void _showPremiumLimitSheet() {
+    if (!mounted) return;
+    final lang = currentLanguage.value;
+    final scheme = Theme.of(context).colorScheme;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: scheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              AppStrings.get('ai_premium_limit_title', lang),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: scheme.onSurface,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              AppStrings.aiPremiumLimitReached(_access?.monthResetsOn, lang),
+              style: TextStyle(fontSize: 14, color: scheme.onSurfaceVariant),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                AppStrings.get('ai_maybe_later', lang),
+                style: TextStyle(color: scheme.onSurfaceVariant),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLimitSheet() {
+    if (_access?.tier == SubscriptionTier.free) {
+      _showUpgradeSheet();
+    } else {
+      _showPremiumLimitSheet();
+    }
   }
 
   Future<void> _send(String text) async {
@@ -295,7 +517,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
     final access = _access;
     if (access != null && !access.allowed) {
-      _showUpgradeSheet();
+      _showLimitSheet();
       return;
     }
 
@@ -320,12 +542,19 @@ class _AiChatScreenState extends State<AiChatScreen> {
         return;
       }
 
-      if (access != null && access.tier == SubscriptionTier.free) {
-        await _incrementAiUsage();
+      if (access != null) {
+        if (access.tier == SubscriptionTier.free) {
+          await _incrementAiUsage();
+        } else if (!access.premiumUnlimited) {
+          await SubscriptionService.incrementPremiumAiUsage(access.premiumMessagesUsed);
+        }
       }
       if (!mounted) return;
       final dataWindowDays = access?.dataWindowDays ?? 7;
       final context = await _buildContext(dataWindowDays);
+      final history = _conversationHistoryForApi(text);
+      final staticPrompt = _buildStaticSystemPrompt();
+
       final response = await http.post(
         Uri.parse('https://api.anthropic.com/v1/messages'),
         headers: {
@@ -334,25 +563,23 @@ class _AiChatScreenState extends State<AiChatScreen> {
           'content-type': 'application/json',
         },
         body: jsonEncode({
-          'model': 'claude-haiku-4-5-20251001',
-          'max_tokens': 512,
-          'system': 'You are Balanzo, a personal finance assistant.\n'
-              'You help users understand their household spending, track prices, manage budgets, and interpret their receipt and purchase data.\n\n'
-              'You ONLY answer questions related to:\n'
-              '- Personal spending and budgets\n'
-              '- Receipt items, prices and categories\n'
-              '- Household expenses and inflation\n'
-              '- Restock suggestions and shopping\n'
-              '- VAT and savings\n'
-              '- Family spending\n\n'
-              'If the user asks anything unrelated to personal finance or their spending data, respond with:\n'
-              '\'I can only help with questions about your spending and household finances. Try asking about your budget, recent purchases, or price trends.\'\n\n'
-              'Always be helpful, concise, and data-driven.\n'
-              'Use the spending context provided to give specific answers.\n\n'
-              'Always respond in the same language as the user interface. Current language: ${currentLanguage.value.toUpperCase()}. If AZ respond in Azerbaijani. If RU respond in Russian. If EN respond in English.\n'
-              'Use AZN (manat) as currency.\n'
-              'Here is the user\'s purchase data for context:\n$context',
+          'model': 'claude-sonnet-4-6',
+          'max_tokens': 1024,
+          'temperature': 0.3,
+          'system': [
+            {
+              'type': 'text',
+              'text': staticPrompt,
+              'cache_control': {'type': 'ephemeral'},
+            },
+            {
+              'type': 'text',
+              'text': "User's financial context:\n$context",
+              'cache_control': {'type': 'ephemeral'},
+            },
+          ],
           'messages': [
+            ...history,
             {'role': 'user', 'content': text},
           ],
         }),
@@ -373,17 +600,36 @@ class _AiChatScreenState extends State<AiChatScreen> {
               questionsLimit: access.questionsLimit,
               isLoyalUser: access.isLoyalUser,
             );
+          } else if (access != null &&
+              access.tier != SubscriptionTier.free &&
+              !access.premiumUnlimited) {
+            final used = access.premiumMessagesUsed + 1;
+            final limit = access.premiumMessagesLimit;
+            _access = AiAccessResult(
+              allowed: used < limit,
+              tier: access.tier,
+              dataWindowDays: access.dataWindowDays,
+              premiumMessagesUsed: used,
+              premiumMessagesLimit: limit,
+              monthResetsOn: access.monthResetsOn,
+            );
           }
         });
       } else {
         setState(() => _messages.add(
-          _Message(text: 'Sorry, I couldn\'t get a response right now.', isUser: false),
+          _Message(
+            text: AppStrings.get('ai_response_error', currentLanguage.value),
+            isUser: false,
+          ),
         ));
       }
     } catch (_) {
       if (!mounted) return;
       setState(() => _messages.add(
-        _Message(text: 'Network error. Please try again.', isUser: false),
+        _Message(
+          text: AppStrings.get('ai_network_error', currentLanguage.value),
+          isUser: false,
+        ),
       ));
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -408,6 +654,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
+        toolbarHeight: BalanzoHeaderStyles.toolbarHeight,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
@@ -420,16 +667,32 @@ class _AiChatScreenState extends State<AiChatScreen> {
         ),
         title: Text(
           AppStrings.get('ai_assistant', currentLanguage.value),
-          style: const TextStyle(fontWeight: FontWeight.bold),
+          style: BalanzoHeaderStyles.titleStyle.copyWith(color: Colors.white),
         ),
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        foregroundColor: Theme.of(context).colorScheme.onSurface,
+        backgroundColor: AppColors.primaryGreen(Theme.of(context).brightness),
+        foregroundColor: Colors.white,
         elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(36),
+          child: Container(
+            width: double.infinity,
+            color: Colors.black.withValues(alpha: 0.2),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Text(
+              AppStrings.get('ai_disclaimer', currentLanguage.value),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 11,
+                color: Colors.white70,
+                height: 1.3,
+              ),
+            ),
+          ),
+        ),
       ),
       body: Column(
         children: [
-          if (_access != null && !_isPremium) _buildUpgradeBanner(),
-          // Quick question pills
+          if (_access != null) _buildUsageBanner(),
           if (_messages.length <= 1)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
@@ -439,33 +702,44 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 children: _quickQuestions.map((q) {
                   final accessLoaded = _access != null;
                   final canSend = accessLoaded && _access!.allowed;
-                  return Opacity(
-                    opacity: accessLoaded ? 1.0 : 0.4,
-                    child: GestureDetector(
-                      onTap: accessLoaded
-                          ? () {
-                              if (canSend) {
-                                _send(q);
-                              } else {
-                                _showUpgradeSheet();
-                              }
+                  final isDark = Theme.of(context).brightness == Brightness.dark;
+                  return GestureDetector(
+                    onTap: accessLoaded
+                        ? () {
+                            if (canSend) {
+                              _send(q);
+                            } else {
+                              _showLimitSheet();
                             }
-                          : null,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: AppColors.darkElevated,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.primaryGreenDark.withValues(alpha: 0.5)),
+                          }
+                        : () {
+                            if (_access != null && !_access!.allowed) {
+                              _showLimitSheet();
+                            } else {
+                              _send(q);
+                            }
+                          },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white12 : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.primaryGreenDark.withValues(alpha: 0.35),
                         ),
-                        child: Text(q, style: const TextStyle(fontSize: 12, color: AppColors.green400)),
+                      ),
+                      child: Text(
+                        q,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
                       ),
                     ),
                   );
                 }).toList(),
               ),
             ),
-          // Messages
           Expanded(
             child: ListView.builder(
               controller: _scrollController,
@@ -490,7 +764,6 @@ class _AiChatScreenState extends State<AiChatScreen> {
                 ],
               ),
             ),
-          // Input
           Container(
             color: AppColors.darkElevated,
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),

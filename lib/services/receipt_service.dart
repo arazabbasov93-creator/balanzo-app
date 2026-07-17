@@ -4,11 +4,12 @@ import '../models/receipt.dart';
 import '../models/fiscal_duplicate.dart';
 import '../models/home_insights.dart';
 import '../models/category.dart';
-import 'analytics_service.dart';
+import 'receipt_sequence_service.dart';
 import 'category_assignment_service.dart';
 import 'category_matcher.dart';
 import 'category_service.dart';
 import 'ekassa_service.dart';
+import 'analytics_service.dart';
 import 'supabase_access.dart';
 
 class ReceiptService {
@@ -156,6 +157,7 @@ class ReceiptService {
     }
 
     final storeName = corrected.store?.trim();
+    final seq = await ReceiptSequenceService.allocateForUser(userId);
     final data = <String, dynamic>{
       'user_id': userId,
       'store_name': (storeName != null && storeName.isNotEmpty)
@@ -165,6 +167,13 @@ class ReceiptService {
       'vat_amount': corrected.vat,
       'total_amount': corrected.total,
     };
+    if (seq != null) data['sequence_number'] = seq;
+    if (corrected.serviceCharge != null && corrected.serviceCharge! > 0) {
+      data['service_charge'] = corrected.serviceCharge;
+    }
+    if (corrected.discountTotal != null && corrected.discountTotal! > 0) {
+      data['discount_amount'] = corrected.discountTotal;
+    }
     if (corrected.documentId != null) data['fiscal_id'] = corrected.documentId;
     if (contentHash != null) data['content_hash'] = contentHash;
     if (corrected.currency != null) data['currency'] = corrected.currency;
@@ -187,7 +196,16 @@ class ReceiptService {
         if (e2 is SoftDuplicateException) rethrow;
         debugPrint('[Receipt Save] Retry 2: $e2');
         data.remove('family_id');
-        receiptRow = await _insertReceiptRow(data);
+        try {
+          receiptRow = await _insertReceiptRow(data);
+        } catch (e3) {
+          if (e3 is SoftDuplicateException) rethrow;
+          debugPrint('[Receipt Save] Retry 3 (strip fees/seq): $e3');
+          data.remove('service_charge');
+          data.remove('discount_amount');
+          data.remove('sequence_number');
+          receiptRow = await _insertReceiptRow(data);
+        }
       }
     }
     final receiptId = receiptRow['id'] as String;
@@ -275,6 +293,12 @@ class ReceiptService {
       'total_amount': parsed.total,
       'vat_amount': parsed.vat,
     };
+    if (parsed.serviceCharge != null && parsed.serviceCharge! > 0) {
+      updateData['service_charge'] = parsed.serviceCharge;
+    }
+    if (parsed.discountTotal != null && parsed.discountTotal! > 0) {
+      updateData['discount_amount'] = parsed.discountTotal;
+    }
     if (parsed.isGovernmentVerified) {
       updateData['is_government_verified'] = true;
     }

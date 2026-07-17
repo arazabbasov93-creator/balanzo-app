@@ -52,6 +52,7 @@ class _FiscalIdScreenState extends State<FiscalIdScreen> {
     final result = await showModalBottomSheet<Object?>(
       context: context,
       isScrollControlled: true,
+      isDismissible: false,
       backgroundColor: Colors.transparent,
       builder: (_) => ReceiptResultSheet(
         receipt: receipt,

@@ -158,15 +158,17 @@ class _SettingsTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.shade200),
-      ),
-      child: ListTile(
-        tileColor: Colors.transparent,
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade200),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: ListTile(
         leading: Icon(icon, color: iconColor ?? AppColors.primaryGreenDark),
         title: Text(
           label,
@@ -177,6 +179,7 @@ class _SettingsTile extends StatelessWidget {
         ),
         trailing: const Icon(Icons.chevron_right, color: Colors.grey),
         onTap: onTap,
+      ),
       ),
     );
   }

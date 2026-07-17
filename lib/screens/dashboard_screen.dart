@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../diag_log.dart';
 import '../app_state.dart';
@@ -14,7 +16,11 @@ import 'receipts_screen.dart';
 import 'restock_screen.dart';
 import 'ai_chat_screen.dart';
 import 'profile_screen.dart';
+import 'notifications_screen.dart';
+import '../services/notification_service.dart';
+import '../services/family_invite_link_service.dart';
 import '../config/app_colors.dart';
+import '../widgets/balanzo_header_styles.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -32,6 +38,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     diag('Dashboard.initState tab=$_tab');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(FamilyInviteLinkService.tryConsumePendingInvite());
+    });
   }
 
   Widget? _tabWidget(int index) {
@@ -124,6 +133,7 @@ class _HomeTabState extends State<_HomeTab> with SingleTickerProviderStateMixin 
     cachedName: null,
     periodSelectorEnabled: true,
     noFamily: false,
+    familyName: null,
   );
   HomeHeaderSnapshot _headerFamily = (
     insights: null,
@@ -131,6 +141,7 @@ class _HomeTabState extends State<_HomeTab> with SingleTickerProviderStateMixin 
     cachedName: null,
     periodSelectorEnabled: false,
     noFamily: false,
+    familyName: null,
   );
 
   @override
@@ -144,9 +155,20 @@ class _HomeTabState extends State<_HomeTab> with SingleTickerProviderStateMixin 
     final now = DateTime.now();
     _periodMonth = now.month;
     _periodYear = now.year;
+    homePeriod.value = HomePeriod(month: _periodMonth, year: _periodYear);
     _scopeTabCtrl = TabController(length: 2, vsync: this);
     _scopeTabCtrl.addListener(_onScopeTabChanged);
+    homePeriod.addListener(_onGlobalPeriodChanged);
     _refreshFamilyStatus();
+  }
+
+  void _onGlobalPeriodChanged() {
+    final p = homePeriod.value;
+    if (_periodMonth == p.month && _periodYear == p.year) return;
+    setState(() {
+      _periodMonth = p.month;
+      _periodYear = p.year;
+    });
   }
 
   void _onScopeTabChanged() {
@@ -161,6 +183,7 @@ class _HomeTabState extends State<_HomeTab> with SingleTickerProviderStateMixin 
 
   @override
   void dispose() {
+    homePeriod.removeListener(_onGlobalPeriodChanged);
     _scopeTabCtrl.removeListener(_onScopeTabChanged);
     _scopeTabCtrl.dispose();
     super.dispose();
@@ -171,6 +194,7 @@ class _HomeTabState extends State<_HomeTab> with SingleTickerProviderStateMixin 
   bool get _canScanReceipt => _scopeIndex == 0 || _hasFamily;
 
   void _onPeriodChanged(int month, int year) {
+    homePeriod.value = HomePeriod(month: month, year: year);
     setState(() {
       _periodMonth = month;
       _periodYear = year;
@@ -219,18 +243,21 @@ class _HomeTabState extends State<_HomeTab> with SingleTickerProviderStateMixin 
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SizedBox(
-                    height: 36,
+                    height: BalanzoHeaderStyles.toolbarHeight,
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          'Balanzo',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 17,
+                        const SizedBox(width: 48),
+                        Expanded(
+                          child: Center(
+                            child: Text(
+                              'Balanzo',
+                              style: BalanzoHeaderStyles.titleStyle.copyWith(
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
                         ),
+                        _NotificationBellButton(lang: lang),
                       ],
                     ),
                   ),
@@ -240,8 +267,9 @@ class _HomeTabState extends State<_HomeTab> with SingleTickerProviderStateMixin 
                     indicatorWeight: 2,
                     labelColor: Colors.white,
                     unselectedLabelColor: Colors.white70,
-                    labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                    unselectedLabelStyle: const TextStyle(fontSize: 12),
+                    labelStyle: BalanzoHeaderStyles.tabLabelStyle,
+                    unselectedLabelStyle:
+                        BalanzoHeaderStyles.tabUnselectedLabelStyle,
                     labelPadding: const EdgeInsets.symmetric(horizontal: 8),
                     tabs: [
                       Tab(text: AppStrings.get('tab_personal', lang)),
@@ -250,17 +278,23 @@ class _HomeTabState extends State<_HomeTab> with SingleTickerProviderStateMixin 
                   ),
                   ValueListenableBuilder<String?>(
                     valueListenable: cachedDisplayName,
-                    builder: (context, cached, _) => HomeGreetingCard(
-                      identity: identity,
-                      insights: header.insights,
-                      incomeTotal: header.incomeTotal,
-                      cachedName: cached ?? header.cachedName,
-                      periodMonth: _periodMonth,
-                      periodYear: _periodYear,
-                      onPeriodChanged: _onPeriodChanged,
-                      periodSelectorEnabled: header.periodSelectorEnabled,
-                      attachedToHeader: true,
-                    ),
+                    builder: (context, cached, _) {
+                      if (_scopeIndex == 1) {
+                        return const SizedBox.shrink();
+                      }
+                      return HomeGreetingCard(
+                        identity: identity,
+                        insights: header.insights,
+                        incomeTotal: header.incomeTotal,
+                        cachedName: cached ?? header.cachedName,
+                        familyName: null,
+                        periodMonth: _periodMonth,
+                        periodYear: _periodYear,
+                        onPeriodChanged: _onPeriodChanged,
+                        periodSelectorEnabled: header.periodSelectorEnabled,
+                        attachedToHeader: true,
+                      );
+                    },
                   ),
                 ],
               ),
@@ -303,6 +337,7 @@ class _HomeTabState extends State<_HomeTab> with SingleTickerProviderStateMixin 
       floatingActionButton: _canScanReceipt
           ? FloatingActionButton.extended(
               heroTag: 'fab_home_add_receipt',
+              backgroundColor: AppColors.primaryGreen(Theme.of(context).brightness),
               onPressed: () => showAddReceiptSheet(context, onDone: refresh),
               icon: const Icon(Icons.add, color: Colors.white),
               label: Text(
@@ -311,6 +346,47 @@ class _HomeTabState extends State<_HomeTab> with SingleTickerProviderStateMixin 
               ),
             )
           : null,
+    );
+  }
+}
+
+class _NotificationBellButton extends StatefulWidget {
+  final String lang;
+  const _NotificationBellButton({required this.lang});
+
+  @override
+  State<_NotificationBellButton> createState() => _NotificationBellButtonState();
+}
+
+class _NotificationBellButtonState extends State<_NotificationBellButton> {
+  int _count = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final items = await NotificationService.unreadCount();
+    if (mounted) setState(() => _count = items);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Badge(
+        isLabelVisible: _count > 0,
+        label: Text(_count > 99 ? '99+' : '$_count'),
+        child: const Icon(Icons.notifications_outlined, color: Colors.white),
+      ),
+      tooltip: AppStrings.get('notifications', widget.lang),
+      onPressed: () async {
+        await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+        );
+        _load();
+      },
     );
   }
 }

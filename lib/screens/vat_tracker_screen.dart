@@ -270,15 +270,17 @@ class _VatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: AppColors.darkElevated,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.shade900.withValues(alpha: 0.4)),
-      ),
-      child: ListTile(
-        tileColor: Colors.transparent,
+    return Material(
+      color: AppColors.darkElevated,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.orange.shade900.withValues(alpha: 0.4)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         leading: Container(
           width: 40,
@@ -314,6 +316,7 @@ class _VatCard extends StatelessWidget {
           ),
           child: const Text('Claim', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
         ),
+      ),
       ),
     );
   }

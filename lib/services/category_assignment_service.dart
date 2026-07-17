@@ -55,11 +55,13 @@ class CategoryAssignmentService {
       ),
       subtotal: receipt.subtotal,
       serviceCharge: receipt.serviceCharge,
+      discountTotal: receipt.discountTotal,
       vat: receipt.vat,
       total: receipt.total,
       currency: receipt.currency,
       isGovernmentVerified: receipt.isGovernmentVerified,
       documentId: receipt.documentId,
+      sequenceNumber: receipt.sequenceNumber,
     );
   }
 

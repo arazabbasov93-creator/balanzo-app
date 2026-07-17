@@ -63,6 +63,44 @@ class BudgetService {
     await _db.from('budgets').delete().eq('id', id);
   }
 
+  /// Family-wide monthly budget (category_id IS NULL). Falls back to sum of all
+  /// family budget rows for the period when no total row exists.
+  static Future<double?> fetchFamilyAvailableBudget(
+    String familyId,
+    int month,
+    int year,
+  ) async {
+    try {
+      final totalRows = await _db
+          .from('budgets')
+          .select('amount')
+          .eq('family_id', familyId)
+          .eq('month', month)
+          .eq('year', year)
+          .filter('category_id', 'is', null);
+      final totals = totalRows as List;
+      if (totals.isNotEmpty) {
+        return (totals.first['amount'] as num).toDouble();
+      }
+
+      final allRows = await _db
+          .from('budgets')
+          .select('amount')
+          .eq('family_id', familyId)
+          .eq('month', month)
+          .eq('year', year);
+      final all = allRows as List;
+      if (all.isEmpty) return null;
+      var sum = 0.0;
+      for (final r in all) {
+        sum += (r['amount'] as num?)?.toDouble() ?? 0;
+      }
+      return sum;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Calculates spent amounts per category for the given month.
   static Future<Map<String, double>> spentByCategory(
       int month, int year, {String? familyId}) async {

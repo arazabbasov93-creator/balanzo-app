@@ -162,6 +162,7 @@ class _ReceiptCaptureScreenState extends State<ReceiptCaptureScreen>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      isDismissible: false,
       backgroundColor: Colors.transparent,
       builder: (_) => ReceiptResultSheet(
         receipt: receipt,
